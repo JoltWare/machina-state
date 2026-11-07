@@ -1,0 +1,14 @@
+  [RED    on ]
+state: Red
+  [RED    off]
+  [GREEN  on ]
+tick 1 -> state: Green
+  [GREEN  off]
+  [YELLOW on ]
+tick 2 -> state: Yellow
+  [YELLOW off]
+  [RED    on ]
+tick 3 -> state: Red
+  [RED    off]
+  [GREEN  on ]
+tick 4 -> state: Green

@@ -1,0 +1,39 @@
+{
+  "name": "VendingMachine",
+  "namespace": "Demo",
+  "states": [
+    { "id": "init", "name": "Initial", "kind": "initial", "parent": null, "x": 40, "y": 68, "w": 24, "h": 24 },
+    { "id": "Boot", "name": "Boot", "kind": "state", "parent": null, "x": 100, "y": 40, "w": 140, "h": 80, "entry": "selfTest", "exit": "" },
+    { "id": "Idle", "name": "Idle", "kind": "state", "parent": null, "x": 100, "y": 230, "w": 140, "h": 70, "entry": "showWelcome", "exit": "" },
+    { "id": "ch1", "name": "Choice", "kind": "choice", "parent": null, "x": 340, "y": 250, "w": 30, "h": 30 },
+    { "id": "Collecting", "name": "Collecting", "kind": "state", "parent": null, "x": 460, "y": 60, "w": 160, "h": 70, "entry": "showCredit", "exit": "" },
+    { "id": "Ready", "name": "Ready", "kind": "state", "parent": null, "x": 460, "y": 330, "w": 190, "h": 90, "entry": "showSelect", "exit": "" },
+    { "id": "Dispensing", "name": "Dispensing", "kind": "state", "parent": null, "x": 760, "y": 260, "w": 300, "h": 230, "entry": "openFlap", "exit": "closeFlap" },
+    { "id": "initD", "name": "Initial", "kind": "initial", "parent": "Dispensing", "x": 785, "y": 368, "w": 24, "h": 24 },
+    { "id": "Dropping", "name": "Dropping", "kind": "state", "parent": "Dispensing", "x": 840, "y": 350, "w": 140, "h": 60, "entry": "", "exit": "" },
+    { "id": "Done", "name": "Done", "kind": "final", "parent": "Dispensing", "x": 1000, "y": 440, "w": 24, "h": 24 },
+    { "id": "ch2", "name": "Choice", "kind": "choice", "parent": null, "x": 420, "y": 560, "w": 30, "h": 30 }
+  ],
+  "transitions": [
+    { "id": "t0", "source": "init", "target": "Boot", "event": "", "guard": "", "action": "" },
+    { "id": "t1", "source": "Boot", "target": "Idle", "event": "", "guard": "", "action": "" },
+    { "id": "t2", "source": "Idle", "target": "ch1", "event": "Coin", "guard": "", "action": "addCredit" },
+    { "id": "t3", "source": "Collecting", "target": "ch1", "event": "Coin", "guard": "", "action": "addCredit", "bend": 30 },
+    { "id": "t4", "source": "ch1", "target": "Ready", "event": "", "guard": "hasEnoughCredit", "action": "" },
+    { "id": "t5", "source": "ch1", "target": "Collecting", "event": "", "guard": "else", "action": "", "bend": 30 },
+    { "id": "t6", "source": "Collecting", "target": "Idle", "event": "after(30s)", "guard": "", "action": "refund", "bend": 60 },
+    { "id": "t7", "source": "Ready", "target": "Dispensing", "event": "Select", "guard": "inStock", "action": "vend" },
+    { "id": "t8", "source": "Ready", "target": "Idle", "event": "Cancel", "guard": "", "action": "refund", "bend": -40 },
+    { "id": "t9", "source": "Ready", "target": "Ready", "event": "Coin", "guard": "", "action": "addCredit", "internal": true },
+    { "id": "t10", "source": "initD", "target": "Dropping", "event": "", "guard": "", "action": "" },
+    { "id": "t11", "source": "Dropping", "target": "Done", "event": "after(2s)", "guard": "", "action": "" },
+    { "id": "t12", "source": "Dispensing", "target": "ch2", "event": "", "guard": "", "action": "" },
+    { "id": "t13", "source": "ch2", "target": "Idle", "event": "", "guard": "hasChange", "action": "giveChange", "bend": -60 },
+    { "id": "t14", "source": "ch2", "target": "Idle", "event": "", "guard": "else", "action": "", "bend": 20 }
+  ],
+  "events": {
+    "Coin": "int cents",
+    "Select": "int item"
+  },
+  "codegen": { "language": "cpp", "style": "switch", "trace": true, "threadSafe": false, "queue": true, "queueCapacity": 8 }
+}

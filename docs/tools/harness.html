@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<!-- Copyright (c) 2026 JoltWare
+     SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>MachinaState screenshot harness</title>
+<style>
+  /* VS Code "Light Modern" theme values used by the editor's CSS. */
+  :root {
+    --vscode-font-family: "Segoe UI", system-ui, sans-serif;
+    --vscode-font-size: 13px;
+    --vscode-editor-font-family: Consolas, "Courier New", monospace;
+    --vscode-foreground: #3b3b3b;
+    --vscode-descriptionForeground: #717171;
+    --vscode-errorForeground: #d13438;
+    --vscode-editor-background: #ffffff;
+    --vscode-editor-foreground: #3b3b3b;
+    --vscode-editorWidget-background: #f8f8f8;
+    --vscode-editorIndentGuide-background: #d9d9d9;
+    --vscode-sideBar-background: #f8f8f8;
+    --vscode-panel-border: #e5e5e5;
+    --vscode-focusBorder: #005fb8;
+    --vscode-button-background: #005fb8;
+    --vscode-button-foreground: #ffffff;
+    --vscode-button-secondaryBackground: #e5e5e5;
+    --vscode-button-secondaryForeground: #3b3b3b;
+    --vscode-button-secondaryHoverBackground: #cccccc;
+    --vscode-input-background: #ffffff;
+    --vscode-input-foreground: #3b3b3b;
+    --vscode-input-border: #cecece;
+    --vscode-textLink-foreground: #005fb8;
+    --vscode-testing-iconPassed: #388a34;
+    --vscode-editorWarning-foreground: #bf8803;
+    --vscode-diffEditor-insertedTextBackground: rgba(156, 204, 44, 0.25);
+    --vscode-inputValidation-errorBackground: #f2dede;
+    --vscode-inputValidation-errorBorder: #be1100;
+  }
+</style>
+<link href="../../media/editor.css" rel="stylesheet">
+<style>
+  html, body { width: 1100px; height: 650px; }
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <div class="group" id="tools">
+    <button data-mode="select">Select</button>
+    <button data-mode="state">State</button>
+    <button data-mode="region">Region</button>
+    <button data-mode="initial">Initial</button>
+    <button data-mode="final">Final</button>
+    <button data-mode="history">History</button>
+    <button data-mode="choice">Choice</button>
+    <button data-mode="transition">Transition</button>
+    <button id="btn-delete">Delete</button>
+  </div>
+  <div class="group">
+    <button id="btn-snap">Snap</button>
+    <button id="btn-layout">Layout</button>
+    <button id="btn-fit">Fit</button>
+    <button id="btn-png">PNG</button>
+    <button id="btn-svg">SVG</button>
+    <button id="btn-sim">Simulate</button>
+  </div>
+  <div class="group">
+    <select id="sel-lang"><option value="cpp">C++</option><option value="csharp">C#</option><option value="c">C</option></select>
+    <select id="sel-style"><option value="switch">Switch-based</option><option value="table">Table-based</option></select>
+    <label class="check"><input type="checkbox" id="chk-trace"> Trace</label>
+    <label class="check"><input type="checkbox" id="chk-threadsafe"> Thread-safe</label>
+    <label class="check"><input type="checkbox" id="chk-queue"> Queue</label>
+    <button id="btn-gen">Generate Code</button>
+  </div>
+  <div class="group" id="help-group">
+    <button id="btn-help">?</button>
+  </div>
+</div>
+<div id="main">
+  <svg id="canvas" tabindex="0">
+    <defs>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z"></path>
+      </marker>
+    </defs>
+    <g id="viewport"></g>
+  </svg>
+  <div id="side">
+    <div id="panel"></div>
+    <div id="issues"></div>
+  </div>
+</div>
+<div id="parse-error" hidden></div>
+<script>
+  window.acquireVsCodeApi = () => {
+    let state;
+    window.posted = [];
+    return { postMessage: msg => (window.posted.push(msg), (window.lastPosted = msg)), getState: () => state, setState: s => (state = s) };
+  };
+</script>
+<script src="../../media/machina.js"></script>
+<script src="../../media/editor.js"></script>
+<script>
+  (async () => {
+    const params = new URLSearchParams(location.search);
+    if (!params.get('shot')) {
+      // No scenario: the UI tests (test/ui.test.js) drive the editor themselves.
+      document.body.dataset.ready = 'true';
+      return;
+    }
+    const shot = await (await fetch(`shots/${params.get('shot')}.json`)).json();
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    window.postMessage({ type: 'update', text: shot.diagram }, '*');
+    window.postMessage({ type: 'validation', issues: shot.issues }, '*');
+    await wait(150);
+    if (shot.select) {
+      const target = document.querySelector(`[data-id="${shot.select}"]`);
+      target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
+    }
+    for (const [i, id] of (shot.selectMany || []).entries()) {
+      const target = document.querySelector(`g[data-id="${id}"]`);
+      target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, shiftKey: i > 0 }));
+      window.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
+    }
+    if (shot.mode) {
+      document.querySelector(`button[data-mode="${shot.mode}"]`).click();
+    }
+    // Simulator steps: "Event", "Event(1, 2)" (arguments), "-guard" / "+guard" (guard result),
+    // or the label of any other panel button (e.g. "after 2 s", "Record", "Save (3)", "Run").
+    const panelButton = label => [...document.querySelectorAll('#panel button')].find(b => b.firstChild && b.firstChild.textContent === label);
+    if (shot.sim) {
+      document.getElementById('btn-sim').click();
+      for (const step of shot.sim) {
+        await wait(50);
+        const guard = /^([+-])(\w+)$/.exec(step);
+        if (guard) {
+          const box = [...document.querySelectorAll('.guards label')].find(l => l.textContent.trim() === guard[2]).querySelector('input');
+          box.checked = guard[1] === '+';
+          box.dispatchEvent(new Event('change'));
+          continue;
+        }
+        const call = /^(\w+)\((.*)\)$/.exec(step);
+        const button = panelButton(call ? call[1] : step);
+        if (!button) {
+          throw new Error('no simulator button ' + step);
+        }
+        if (call) {
+          const input = button.parentElement.querySelector('input.args');
+          input.value = call[2];
+          input.dispatchEvent(new Event('input'));
+        }
+        button.click();
+      }
+      if (shot.coverage) {
+        const box = [...document.querySelectorAll('#panel label')].find(l => l.textContent.includes('Highlight untaken')).querySelector('input');
+        box.checked = true;
+        box.dispatchEvent(new Event('change'));
+      }
+      const log = document.querySelector('.log');
+      if (log) {
+        log.scrollTop = log.scrollHeight;
+      }
+    }
+    await wait(100);
+    document.body.dataset.ready = 'true';
+  })().catch(err => {
+    document.body.dataset.ready = 'error: ' + err.message;
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,126 @@
+{
+  "name": "DoorLock",
+  "namespace": "Security",
+  "states": [
+    {
+      "id": "init",
+      "name": "Initial",
+      "kind": "initial",
+      "parent": null,
+      "x": 60,
+      "y": 168,
+      "w": 24,
+      "h": 24
+    },
+    {
+      "id": "Locked",
+      "name": "Locked",
+      "kind": "state",
+      "parent": null,
+      "x": 140,
+      "y": 130,
+      "w": 210,
+      "h": 100,
+      "entry": "engageBolt",
+      "exit": ""
+    },
+    {
+      "id": "Unlocked",
+      "name": "Unlocked",
+      "kind": "state",
+      "parent": null,
+      "x": 560,
+      "y": 140,
+      "w": 160,
+      "h": 80,
+      "entry": "releaseBolt",
+      "exit": ""
+    },
+    {
+      "id": "Alarm",
+      "name": "Alarm",
+      "kind": "state",
+      "parent": null,
+      "x": 360,
+      "y": 360,
+      "w": 160,
+      "h": 80,
+      "entry": "sirenOn",
+      "exit": "sirenOff"
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t0",
+      "source": "init",
+      "target": "Locked",
+      "event": "",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "t1",
+      "source": "Locked",
+      "target": "Unlocked",
+      "event": "EnterCode",
+      "guard": "isValidCode",
+      "action": "resetAttempts",
+      "bend": -30
+    },
+    {
+      "id": "t2",
+      "source": "Locked",
+      "target": "Alarm",
+      "event": "EnterCode",
+      "guard": "tooManyAttempts",
+      "action": "",
+      "bend": 70
+    },
+    {
+      "id": "t3",
+      "source": "Locked",
+      "target": "Locked",
+      "event": "EnterCode",
+      "guard": "",
+      "action": "countFailure",
+      "internal": true
+    },
+    {
+      "id": "t4",
+      "source": "Unlocked",
+      "target": "Locked",
+      "event": "Lock",
+      "guard": "",
+      "action": "",
+      "bend": -30
+    },
+    {
+      "id": "t5",
+      "source": "Unlocked",
+      "target": "Locked",
+      "event": "Timeout",
+      "guard": "",
+      "action": "",
+      "bend": -80
+    },
+    {
+      "id": "t6",
+      "source": "Alarm",
+      "target": "Locked",
+      "event": "Reset",
+      "guard": "isAdminCode",
+      "action": "resetAttempts",
+      "bend": 70
+    }
+  ],
+  "events": {
+    "EnterCode": "int code",
+    "Reset": "int code"
+  },
+  "codegen": {
+    "language": "csharp",
+    "style": "table",
+    "trace": true,
+    "threadSafe": true
+  }
+}

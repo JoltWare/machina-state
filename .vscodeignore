@@ -1,0 +1,18 @@
+.vscode/**
+src/**
+examples/**
+**/*.map
+tsconfig.json
+.clang-format
+.gitignore
+.gitattributes
+.github/**
+test/**
+test-output/**
+scripts/**
+docs/**
+# elkjs: only lib/elk.bundled.js and lib/elk-api.js are loaded (src/layout.ts); keep the licence.
+node_modules/elkjs/lib/elk-worker*.js
+node_modules/elkjs/lib/main.js
+node_modules/elkjs/**/*.d.ts
+node_modules/elkjs/README.md

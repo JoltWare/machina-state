@@ -1,0 +1,97 @@
+{
+    "name": "ConstArgs",
+    "namespace": "Lab",
+    "states": [
+        {
+            "id": "i0",
+            "name": "",
+            "kind": "initial",
+            "parent": null,
+            "x": 40,
+            "y": 60,
+            "w": 120,
+            "h": 50
+        },
+        {
+            "id": "Idle",
+            "name": "Idle",
+            "kind": "state",
+            "parent": null,
+            "x": 40,
+            "y": 120,
+            "w": 120,
+            "h": 50
+        },
+        {
+            "id": "Busy",
+            "name": "Busy",
+            "kind": "state",
+            "parent": null,
+            "x": 40,
+            "y": 180,
+            "w": 120,
+            "h": 50,
+            "entry": "busyOn"
+        }
+    ],
+    "transitions": [
+        {
+            "id": "t0",
+            "source": "i0",
+            "target": "Idle",
+            "event": "",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "name",
+            "source": "Idle",
+            "target": "Busy",
+            "event": "Name",
+            "guard": "acceptName",
+            "action": "useName"
+        },
+        {
+            "id": "count",
+            "source": "Busy",
+            "target": "Idle",
+            "event": "Count",
+            "guard": "isBig",
+            "action": "useCount"
+        },
+        {
+            "id": "count2",
+            "source": "Busy",
+            "target": "Busy",
+            "event": "Count",
+            "guard": "",
+            "action": "useCount",
+            "internal": true
+        },
+        {
+            "id": "ping",
+            "source": "Busy",
+            "target": "Busy",
+            "event": "Ping",
+            "guard": "",
+            "action": "pong"
+        },
+        {
+            "id": "ping2",
+            "source": "Idle",
+            "target": "Idle",
+            "event": "Ping",
+            "guard": "",
+            "action": "pong",
+            "internal": true
+        }
+    ],
+    "events": {
+        "Name": "const char* s, const int n",
+        "Count": "const int x, char* const p"
+    },
+    "codegen": {
+        "language": "cpp",
+        "style": "switch"
+    }
+}

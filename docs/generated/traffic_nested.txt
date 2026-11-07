@@ -1,0 +1,45 @@
+  start      TrafficLight
+  enter      Off
+Dispatch(PowerOn)
+  event      PowerOn
+  transition Off -> Operating
+  exit       Off
+  enter      Operating
+  enter      Red
+    redOn()
+Dispatch(Timer)
+  event      Timer
+  transition Red -> Green
+  exit       Red
+    redOff()
+  enter      Green
+    greenOn()
+Dispatch(PedestrianRequest)
+  event      PedestrianRequest
+  transition Green (internal)
+    shortenGreen()
+Dispatch(Fault)
+  event      Fault
+  transition Operating -> Flashing
+  exit       Green
+    greenOff()
+  exit       Operating
+    logFault()
+  enter      Flashing
+    flashOn()
+Dispatch(Repair)
+  event      Repair
+  transition Flashing -> Operating (history)
+  exit       Flashing
+    flashOff()
+  enter      Operating
+  enter      Green
+    greenOn()
+Dispatch(PowerOff)
+  event      PowerOff
+  transition Operating -> Off
+  exit       Green
+    greenOff()
+  exit       Operating
+  enter      Off
+final state: Off

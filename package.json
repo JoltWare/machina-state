@@ -1,0 +1,272 @@
+{
+  "name": "machina-state",
+  "displayName": "MachinaState",
+  "description": "Draw, edit and simulate UML state machine diagrams and generate switch- or table-based state machine code in C++, C# or C.",
+  "version": "1.0.0",
+  "publisher": "JoltWare",
+  "author": "JoltWare",
+  "license": "Apache-2.0",
+  "pricing": "Free",
+  "icon": "media/MachinaState.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JoltWare/machina-state.git"
+  },
+  "bugs": {
+    "url": "https://github.com/JoltWare/machina-state/issues"
+  },
+  "homepage": "https://github.com/JoltWare/machina-state#readme",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Visualization",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "state machine",
+    "uml",
+    "fsm",
+    "hsm",
+    "code generation",
+    "mermaid",
+    "plantuml",
+    "scxml"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "workspaceContains:**/*.machina"
+  ],
+  "contributes": {
+    "configuration": {
+      "title": "MachinaState",
+      "properties": {
+        "machinaState.generateOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Regenerate the state machine code (using the language and style stored in the diagram) whenever a .machina file is saved."
+        }
+      }
+    },
+    "customEditors": [
+      {
+        "viewType": "machinaState.editor",
+        "displayName": "MachinaState Diagram Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.machina"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "languages": [
+      {
+        "id": "json",
+        "extensions": [
+          ".machina"
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "machinaState.newDiagram",
+        "title": "New State Machine Diagram",
+        "category": "MachinaState"
+      },
+      {
+        "command": "machinaState.generateCode",
+        "title": "Generate State Machine Code",
+        "category": "MachinaState",
+        "icon": "$(code)"
+      },
+      {
+        "command": "machinaState.autoLayout",
+        "title": "Auto-Layout Diagram",
+        "category": "MachinaState"
+      },
+      {
+        "command": "machinaState.exportPlantUml",
+        "title": "Export Diagram as PlantUML",
+        "category": "MachinaState"
+      },
+      {
+        "command": "machinaState.exportScxml",
+        "title": "Export Diagram as SCXML",
+        "category": "MachinaState"
+      },
+      {
+        "command": "machinaState.exportMermaid",
+        "title": "Export Diagram as Mermaid",
+        "category": "MachinaState"
+      },
+      {
+        "command": "machinaState.copyMermaid",
+        "title": "Copy Diagram as Mermaid (Markdown)",
+        "category": "MachinaState"
+      },
+      {
+        "command": "machinaState.import",
+        "title": "Import PlantUML, SCXML or Mermaid State Machine",
+        "category": "MachinaState"
+      },
+      {
+        "command": "machinaState.openManual",
+        "title": "Open User Manual",
+        "category": "MachinaState",
+        "icon": "$(book)"
+      },
+      {
+        "command": "machinaState.getStarted",
+        "title": "Get Started",
+        "category": "MachinaState"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "machinaState.generateCode",
+          "when": "activeCustomEditorId == machinaState.editor",
+          "group": "navigation"
+        },
+        {
+          "command": "machinaState.copyMermaid",
+          "when": "activeCustomEditorId == machinaState.editor",
+          "group": "1_export@1"
+        },
+        {
+          "command": "machinaState.exportMermaid",
+          "when": "activeCustomEditorId == machinaState.editor",
+          "group": "1_export@2"
+        },
+        {
+          "command": "machinaState.openManual",
+          "when": "activeCustomEditorId == machinaState.editor",
+          "group": "2_help@1"
+        },
+        {
+          "command": "machinaState.getStarted",
+          "when": "activeCustomEditorId == machinaState.editor",
+          "group": "2_help@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "machinaState.generateCode",
+          "when": "resourceExtname == .machina",
+          "group": "navigation"
+        },
+        {
+          "command": "machinaState.exportPlantUml",
+          "when": "resourceExtname == .machina",
+          "group": "machinaState@1"
+        },
+        {
+          "command": "machinaState.exportScxml",
+          "when": "resourceExtname == .machina",
+          "group": "machinaState@2"
+        },
+        {
+          "command": "machinaState.exportMermaid",
+          "when": "resourceExtname == .machina",
+          "group": "machinaState@3"
+        },
+        {
+          "command": "machinaState.copyMermaid",
+          "when": "resourceExtname == .machina",
+          "group": "machinaState@4"
+        },
+        {
+          "command": "machinaState.import",
+          "when": "resourceExtname =~ /^\\.(puml|plantuml|pu|wsd|scxml|mmd|mermaid)$/",
+          "group": "navigation"
+        }
+      ]
+    },
+    "walkthroughs": [
+      {
+        "id": "gettingStarted",
+        "title": "Get Started with MachinaState",
+        "description": "Draw your first state machine, simulate it and generate code from it.",
+        "steps": [
+          {
+            "id": "createDiagram",
+            "title": "Create a diagram",
+            "description": "State machines are stored in `.machina` files, which open in the diagram editor. Create a new one with an initial pseudostate and a first state.\n[Create a Diagram](command:machinaState.newDiagram)",
+            "media": {
+              "image": "media/walkthrough/create.png",
+              "altText": "A diagram with an initial pseudostate and a selected state, with its properties on the right."
+            },
+            "completionEvents": [
+              "onCommand:machinaState.newDiagram"
+            ]
+          },
+          {
+            "id": "drawStates",
+            "title": "Add states and transitions",
+            "description": "Pick a tool in the toolbar and click the canvas: **State** adds a state (click inside a state to nest it), **Initial**, **Final**, **History** and **Choice** add pseudostates. With **Transition**, drag from one state to another, then set its event, guard and action in the properties panel on the right.\nPress **?** in the editor for all mouse and keyboard shortcuts.",
+            "media": {
+              "image": "media/walkthrough/draw.png",
+              "altText": "A selected transition with its event, guard and action in the properties panel."
+            }
+          },
+          {
+            "id": "simulate",
+            "title": "Simulate the machine",
+            "description": "Press **Simulate** in the toolbar. Fire events, choose guard results and let timers elapse, and watch the active states and the trace of exit, transition and entry actions. Record a sequence of events as a scenario to replay it later.",
+            "media": {
+              "image": "media/walkthrough/simulate.png",
+              "altText": "The simulator highlighting the active state, with the event buttons and the trace."
+            }
+          },
+          {
+            "id": "generateCode",
+            "title": "Generate code",
+            "description": "Choose C++, C# or C and a switch-based or table-based style in the toolbar, then press **Generate Code**. The code is written next to the diagram; implement the guard and action hooks in a subclass.\n[Generate Code](command:machinaState.generateCode)",
+            "media": {
+              "image": "media/walkthrough/generate.png",
+              "altText": "The code generation options in the editor toolbar."
+            },
+            "completionEvents": [
+              "onCommand:machinaState.generateCode"
+            ]
+          },
+          {
+            "id": "learnMore",
+            "title": "Learn more",
+            "description": "The user manual has five step-by-step tutorials and reference chapters on modelling, execution semantics, the simulator and code generation.\n[Open the User Manual](command:machinaState.openManual)",
+            "media": {
+              "image": "media/walkthrough/manual.png",
+              "altText": "The diagram editor with a composite state, an internal transition and a history pseudostate."
+            },
+            "completionEvents": [
+              "onCommand:machinaState.openManual"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./ && node scripts/bundle-webview.js",
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test test/",
+    "test:unit": "npm run compile && node --test test/model.test.js test/golden.test.js",
+    "test:ui": "npm run compile && node --test test/ui.test.js",
+    "test:update": "npm run compile && node test/update-golden.js",
+    "package": "npx --yes @vscode/vsce package",
+    "publish": "npx --yes @vscode/vsce publish"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "@types/vscode": "^1.85.0",
+    "mermaid": "12.2.0",
+    "playwright-core": "^1.65.0",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "elkjs": "^0.9.3"
+  }
+}

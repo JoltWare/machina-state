@@ -1,0 +1,409 @@
+{
+    "name": "HistoryLab",
+    "namespace": "Lab",
+    "states": [
+        {
+            "id": "i0",
+            "name": "",
+            "kind": "initial",
+            "parent": null,
+            "x": 40,
+            "y": 60,
+            "w": 120,
+            "h": 50
+        },
+        {
+            "id": "Idle",
+            "name": "Idle",
+            "kind": "state",
+            "parent": null,
+            "x": 40,
+            "y": 120,
+            "w": 120,
+            "h": 50,
+            "entry": "idleOn"
+        },
+        {
+            "id": "Work",
+            "name": "Work",
+            "kind": "state",
+            "parent": null,
+            "x": 40,
+            "y": 180,
+            "w": 120,
+            "h": 50,
+            "entry": "workOn",
+            "exit": "workOff"
+        },
+        {
+            "id": "hw",
+            "name": "H*",
+            "kind": "history",
+            "parent": "Work",
+            "x": 40,
+            "y": 240,
+            "w": 120,
+            "h": 50,
+            "deep": true
+        },
+        {
+            "id": "iw",
+            "name": "",
+            "kind": "initial",
+            "parent": "Work",
+            "x": 40,
+            "y": 300,
+            "w": 120,
+            "h": 50
+        },
+        {
+            "id": "Ortho",
+            "name": "Ortho",
+            "kind": "state",
+            "parent": "Work",
+            "x": 40,
+            "y": 360,
+            "w": 120,
+            "h": 50,
+            "entry": "orthoOn",
+            "exit": "orthoOff"
+        },
+        {
+            "id": "r1",
+            "name": "Left",
+            "kind": "region",
+            "parent": "Ortho",
+            "x": 40,
+            "y": 420,
+            "w": 120,
+            "h": 50
+        },
+        {
+            "id": "i1",
+            "name": "",
+            "kind": "initial",
+            "parent": "r1",
+            "x": 40,
+            "y": 480,
+            "w": 120,
+            "h": 50
+        },
+        {
+            "id": "A1",
+            "name": "A1",
+            "kind": "state",
+            "parent": "r1",
+            "x": 40,
+            "y": 540,
+            "w": 120,
+            "h": 50,
+            "entry": "a1On"
+        },
+        {
+            "id": "A2",
+            "name": "A2",
+            "kind": "state",
+            "parent": "r1",
+            "x": 40,
+            "y": 600,
+            "w": 120,
+            "h": 50,
+            "entry": "a2On"
+        },
+        {
+            "id": "r2",
+            "name": "Right",
+            "kind": "region",
+            "parent": "Ortho",
+            "x": 40,
+            "y": 660,
+            "w": 120,
+            "h": 50
+        },
+        {
+            "id": "i2",
+            "name": "",
+            "kind": "initial",
+            "parent": "r2",
+            "x": 40,
+            "y": 720,
+            "w": 120,
+            "h": 50
+        },
+        {
+            "id": "B1",
+            "name": "B1",
+            "kind": "state",
+            "parent": "r2",
+            "x": 40,
+            "y": 780,
+            "w": 120,
+            "h": 50,
+            "entry": "b1On"
+        },
+        {
+            "id": "B2",
+            "name": "B2",
+            "kind": "state",
+            "parent": "r2",
+            "x": 40,
+            "y": 840,
+            "w": 120,
+            "h": 50,
+            "entry": "b2On",
+            "exit": "b2Off"
+        },
+        {
+            "id": "Other",
+            "name": "Other",
+            "kind": "state",
+            "parent": "Work",
+            "x": 40,
+            "y": 900,
+            "w": 120,
+            "h": 50,
+            "entry": "otherOn"
+        },
+        {
+            "id": "Single",
+            "name": "Single",
+            "kind": "state",
+            "parent": null,
+            "x": 40,
+            "y": 960,
+            "w": 120,
+            "h": 50,
+            "entry": "singleOn",
+            "exit": "singleOff"
+        },
+        {
+            "id": "sr",
+            "name": "Only",
+            "kind": "region",
+            "parent": "Single",
+            "x": 40,
+            "y": 1020,
+            "w": 120,
+            "h": 50
+        },
+        {
+            "id": "hs",
+            "name": "H",
+            "kind": "history",
+            "parent": "sr",
+            "x": 40,
+            "y": 1080,
+            "w": 120,
+            "h": 50
+        },
+        {
+            "id": "is",
+            "name": "",
+            "kind": "initial",
+            "parent": "sr",
+            "x": 40,
+            "y": 1140,
+            "w": 120,
+            "h": 50
+        },
+        {
+            "id": "S1",
+            "name": "S1",
+            "kind": "state",
+            "parent": "sr",
+            "x": 40,
+            "y": 1200,
+            "w": 120,
+            "h": 50,
+            "entry": "s1On"
+        },
+        {
+            "id": "S2",
+            "name": "S2",
+            "kind": "state",
+            "parent": "sr",
+            "x": 40,
+            "y": 1260,
+            "w": 120,
+            "h": 50,
+            "entry": "s2On",
+            "exit": "s2Off"
+        }
+    ],
+    "transitions": [
+        {
+            "id": "t0",
+            "source": "i0",
+            "target": "Idle",
+            "event": "",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "tiw",
+            "source": "iw",
+            "target": "Ortho",
+            "event": "",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "ti1",
+            "source": "i1",
+            "target": "A1",
+            "event": "",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "ti2",
+            "source": "i2",
+            "target": "B1",
+            "event": "",
+            "guard": "",
+            "action": "prepareRight"
+        },
+        {
+            "id": "tis",
+            "source": "is",
+            "target": "S1",
+            "event": "",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "go",
+            "source": "Idle",
+            "target": "hw",
+            "event": "Go",
+            "guard": "",
+            "action": "resume"
+        },
+        {
+            "id": "into",
+            "source": "Idle",
+            "target": "B2",
+            "event": "Into",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "pause",
+            "source": "Work",
+            "target": "Idle",
+            "event": "Pause",
+            "guard": "",
+            "action": "pause"
+        },
+        {
+            "id": "a12",
+            "source": "A1",
+            "target": "A2",
+            "event": "Next",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "a21",
+            "source": "A2",
+            "target": "A1",
+            "event": "Next",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "b12",
+            "source": "B1",
+            "target": "B2",
+            "event": "Next",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "b21",
+            "source": "B2",
+            "target": "B1",
+            "event": "Back",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "jump",
+            "source": "A2",
+            "target": "Ortho",
+            "event": "Jump",
+            "guard": "",
+            "action": "jump"
+        },
+        {
+            "id": "bjump",
+            "source": "B1",
+            "target": "B2",
+            "event": "Jump",
+            "guard": "",
+            "action": "rightJump"
+        },
+        {
+            "id": "swap",
+            "source": "Ortho",
+            "target": "Other",
+            "event": "Swap",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "swapBack",
+            "source": "Other",
+            "target": "Ortho",
+            "event": "Swap",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "tick",
+            "source": "B2",
+            "target": "B2",
+            "event": "after(200ms)",
+            "guard": "",
+            "action": "tick",
+            "internal": true
+        },
+        {
+            "id": "single",
+            "source": "Idle",
+            "target": "hs",
+            "event": "Enter",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "s12",
+            "source": "S1",
+            "target": "S2",
+            "event": "Next",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "leave",
+            "source": "Single",
+            "target": "Idle",
+            "event": "Pause",
+            "guard": "",
+            "action": "pause"
+        },
+        {
+            "id": "s2timeout",
+            "source": "S2",
+            "target": "S1",
+            "event": "after(100ms)",
+            "guard": "ready",
+            "action": "expired"
+        }
+    ],
+    "events": {},
+    "codegen": {
+        "language": "cpp",
+        "style": "switch"
+    }
+}

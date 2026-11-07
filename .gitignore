@@ -1,0 +1,14 @@
+node_modules/
+out/
+*.vsix
+docs/*.aux
+docs/*.log
+docs/*.out
+docs/*.toc
+docs/*.fls
+docs/*.fdb_latexmk
+*.bak
+test-output/
+media/machina.js
+bin/
+obj/

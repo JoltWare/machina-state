@@ -1,0 +1,212 @@
+{
+  "name": "TrafficLight",
+  "namespace": "Demo",
+  "states": [
+    {
+      "id": "init",
+      "name": "Initial",
+      "kind": "initial",
+      "parent": null,
+      "x": 88,
+      "y": 150,
+      "w": 24,
+      "h": 24
+    },
+    {
+      "id": "Off",
+      "name": "Off",
+      "kind": "state",
+      "parent": null,
+      "x": 40,
+      "y": 210,
+      "w": 120,
+      "h": 60,
+      "entry": "",
+      "exit": ""
+    },
+    {
+      "id": "Operating",
+      "name": "Operating",
+      "kind": "state",
+      "parent": null,
+      "x": 230,
+      "y": 40,
+      "w": 610,
+      "h": 370,
+      "entry": "",
+      "exit": ""
+    },
+    {
+      "id": "initOp",
+      "name": "Initial",
+      "kind": "initial",
+      "parent": "Operating",
+      "x": 256,
+      "y": 128,
+      "w": 24,
+      "h": 24
+    },
+    {
+      "id": "Red",
+      "name": "Red",
+      "kind": "state",
+      "parent": "Operating",
+      "x": 310,
+      "y": 100,
+      "w": 140,
+      "h": 80,
+      "entry": "redOn",
+      "exit": "redOff"
+    },
+    {
+      "id": "Green",
+      "name": "Green",
+      "kind": "state",
+      "parent": "Operating",
+      "x": 570,
+      "y": 100,
+      "w": 240,
+      "h": 96,
+      "entry": "greenOn",
+      "exit": "greenOff"
+    },
+    {
+      "id": "Yellow",
+      "name": "Yellow",
+      "kind": "state",
+      "parent": "Operating",
+      "x": 460,
+      "y": 290,
+      "w": 140,
+      "h": 80,
+      "entry": "yellowOn",
+      "exit": "yellowOff"
+    },
+    {
+      "id": "hist",
+      "name": "History",
+      "kind": "history",
+      "parent": "Operating",
+      "x": 795,
+      "y": 365,
+      "w": 26,
+      "h": 26,
+      "deep": false
+    },
+    {
+      "id": "Flashing",
+      "name": "Flashing",
+      "kind": "state",
+      "parent": null,
+      "x": 380,
+      "y": 480,
+      "w": 160,
+      "h": 70,
+      "entry": "flashOn",
+      "exit": "flashOff"
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t0",
+      "source": "init",
+      "target": "Off",
+      "event": "",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "t1",
+      "source": "initOp",
+      "target": "Red",
+      "event": "",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "t2",
+      "source": "Red",
+      "target": "Green",
+      "event": "Timer",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "t3",
+      "source": "Green",
+      "target": "Yellow",
+      "event": "Timer",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "t4",
+      "source": "Yellow",
+      "target": "Red",
+      "event": "Timer",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "t5",
+      "source": "Green",
+      "target": "Green",
+      "event": "PedestrianRequest",
+      "guard": "",
+      "action": "shortenGreen",
+      "internal": true
+    },
+    {
+      "id": "t6",
+      "source": "Off",
+      "target": "Operating",
+      "event": "PowerOn",
+      "guard": "",
+      "action": "",
+      "bend": -30
+    },
+    {
+      "id": "t7",
+      "source": "Operating",
+      "target": "Off",
+      "event": "PowerOff",
+      "guard": "",
+      "action": "",
+      "bend": -30
+    },
+    {
+      "id": "t8",
+      "source": "Operating",
+      "target": "Flashing",
+      "event": "Fault",
+      "guard": "",
+      "action": "logFault",
+      "bend": 40
+    },
+    {
+      "id": "t9",
+      "source": "Flashing",
+      "target": "hist",
+      "event": "Repair",
+      "guard": "",
+      "action": "",
+      "bend": 30
+    },
+    {
+      "id": "t10",
+      "source": "Flashing",
+      "target": "Off",
+      "event": "PowerOff",
+      "guard": "",
+      "action": "",
+      "bend": -40
+    }
+  ],
+  "events": {},
+  "codegen": {
+    "language": "cpp",
+    "style": "table",
+    "trace": true,
+    "threadSafe": false
+  }
+}

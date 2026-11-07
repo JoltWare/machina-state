@@ -1,0 +1,47 @@
+  Start      DoorLock
+  Enter      Locked
+    engageBolt()
+DispatchEnterCode(1234)
+  Event      EnterCode
+  Transition Locked (internal)
+    countFailure(1234) -> 1 failure(s)
+DispatchEnterCode(1111)
+  Event      EnterCode
+  Transition Locked (internal)
+    countFailure(1111) -> 2 failure(s)
+DispatchEnterCode(2222)
+  Event      EnterCode
+  Transition Locked -> Alarm
+  Exit       Locked
+  Enter      Alarm
+    sirenOn()
+  Event      Lock
+  Ignored    Lock
+Dispatch(Lock) handled: False
+Dispatch(EnterCode) handled: False   // needs its typed method
+DispatchReset(9999)
+  Event      Reset
+  Transition Alarm -> Locked
+  Exit       Alarm
+    sirenOff()
+  Enter      Locked
+    engageBolt()
+DispatchEnterCode(4711)
+  Event      EnterCode
+  Transition Locked -> Unlocked
+  Exit       Locked
+  Enter      Unlocked
+    releaseBolt()
+state: Unlocked
+  Event      Timeout
+  Transition Unlocked -> Locked
+  Exit       Unlocked
+  Enter      Locked
+    engageBolt()
+  Event      Lock
+  Ignored    Lock
+  Event      Lock
+  Ignored    Lock
+  Event      Timeout
+  Ignored    Timeout
+after concurrent calls: Locked

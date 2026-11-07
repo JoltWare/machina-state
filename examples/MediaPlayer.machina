@@ -1,0 +1,197 @@
+{
+  "name": "MediaPlayer",
+  "namespace": "Demo",
+  "states": [
+    {
+      "id": "init",
+      "name": "Initial",
+      "kind": "initial",
+      "parent": null,
+      "x": 30,
+      "y": 118,
+      "w": 24,
+      "h": 24
+    },
+    {
+      "id": "stopped",
+      "name": "Stopped",
+      "kind": "state",
+      "parent": null,
+      "x": 100,
+      "y": 95,
+      "w": 140,
+      "h": 70,
+      "entry": "",
+      "exit": ""
+    },
+    {
+      "id": "active",
+      "name": "Active",
+      "kind": "state",
+      "parent": null,
+      "x": 355,
+      "y": 50,
+      "w": 455,
+      "h": 376,
+      "entry": "powerOnAmp",
+      "exit": "powerOffAmp"
+    },
+    {
+      "id": "initA",
+      "name": "Initial",
+      "kind": "initial",
+      "parent": "active",
+      "x": 477,
+      "y": 136,
+      "w": 24,
+      "h": 24
+    },
+    {
+      "id": "playing",
+      "name": "Playing",
+      "kind": "state",
+      "parent": "active",
+      "x": 414,
+      "y": 230,
+      "w": 150,
+      "h": 80,
+      "entry": "startPlayback",
+      "exit": "stopPlayback"
+    },
+    {
+      "id": "paused",
+      "name": "Paused",
+      "kind": "state",
+      "parent": "active",
+      "x": 661,
+      "y": 266,
+      "w": 130,
+      "h": 70,
+      "entry": "",
+      "exit": ""
+    },
+    {
+      "id": "ejected",
+      "name": "Ejected",
+      "kind": "final",
+      "parent": null,
+      "x": 158,
+      "y": 260,
+      "w": 24,
+      "h": 24
+    },
+    {
+      "id": "histA",
+      "name": "History",
+      "kind": "history",
+      "parent": "active",
+      "x": 380,
+      "y": 380,
+      "w": 26,
+      "h": 26,
+      "deep": false
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t0",
+      "source": "init",
+      "target": "stopped",
+      "event": "",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "t1",
+      "source": "stopped",
+      "target": "active",
+      "event": "Play",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "t2",
+      "source": "initA",
+      "target": "playing",
+      "event": "",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "t3",
+      "source": "playing",
+      "target": "paused",
+      "event": "Pause",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "t4",
+      "source": "paused",
+      "target": "playing",
+      "event": "Play",
+      "guard": "",
+      "action": "",
+      "bend": 36
+    },
+    {
+      "id": "t5",
+      "source": "active",
+      "target": "stopped",
+      "event": "Stop",
+      "guard": "",
+      "action": "resetPosition",
+      "bend": 338
+    },
+    {
+      "id": "t6",
+      "source": "playing",
+      "target": "playing",
+      "event": "TrackEnd",
+      "guard": "hasNextTrack",
+      "action": "nextTrack"
+    },
+    {
+      "id": "t7",
+      "source": "playing",
+      "target": "stopped",
+      "event": "TrackEnd",
+      "guard": "",
+      "action": "",
+      "bend": -70
+    },
+    {
+      "id": "t8",
+      "source": "stopped",
+      "target": "ejected",
+      "event": "Eject",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "t9",
+      "source": "stopped",
+      "target": "histA",
+      "event": "Resume",
+      "guard": "",
+      "action": "",
+      "bend": 60
+    },
+    {
+      "id": "t10",
+      "source": "playing",
+      "target": "playing",
+      "event": "Volume",
+      "guard": "",
+      "action": "setVolume",
+      "internal": true
+    }
+  ],
+  "events": {
+    "Volume": "int level"
+  },
+  "codegen": {
+    "language": "cpp",
+    "style": "switch"
+  }
+}

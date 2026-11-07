@@ -1,0 +1,14 @@
+  [RED    on ]
+transition Red -> Green
+  [RED    off]
+  [GREEN  on ]
+tick 1 -> state: Green
+transition Green -> Yellow
+  [GREEN  off]
+  [YELLOW on ]
+tick 2 -> state: Yellow
+transition Yellow -> Red
+  [YELLOW off]
+  [RED    on ]
+tick 3 -> state: Red
+7 lamp switches

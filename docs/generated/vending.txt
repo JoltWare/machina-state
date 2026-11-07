@@ -1,0 +1,83 @@
+Start()
+  start      VendingMachine
+  enter      Boot
+    selfTest()
+  transition Boot -> Idle
+  exit       Boot
+  enter      Idle
+    showWelcome()
+DispatchCoin(100)
+  event      Coin
+  transition Idle -> Collecting (choice)
+  exit       Idle
+    addCredit(100) -> credit 100
+  enter      Collecting
+    showCredit()
+    StartTimer(Collecting_After30000ms, 30000, 1)
+timer elapsed -> DispatchTimeout(Collecting_After30000ms, 1)
+  event      Collecting_After30000ms
+  transition Collecting -> Idle
+  exit       Collecting
+    CancelTimer(Collecting_After30000ms)
+    refund() -> 100 returned
+  enter      Idle
+    showWelcome()
+DispatchCoin(100)
+  event      Coin
+  transition Idle -> Collecting (choice)
+  exit       Idle
+    addCredit(100) -> credit 100
+  enter      Collecting
+    showCredit()
+    StartTimer(Collecting_After30000ms, 30000, 2)
+DispatchCoin(50)
+  event      Coin
+  transition Collecting -> Ready (choice)
+  exit       Collecting
+    CancelTimer(Collecting_After30000ms)
+    addCredit(50) -> credit 150
+  enter      Ready
+    showSelect()
+DispatchSelect(7)
+  event      Select
+  ignored    Select
+DispatchSelect(1)
+  event      Select
+  transition Ready -> Dispensing
+  exit       Ready
+    vend(1) -> credit 0
+  enter      Dispensing
+    openFlap()
+  enter      Dropping
+    StartTimer(Dropping_After2000ms, 2000, 1)
+timer elapsed -> DispatchTimeout(Dropping_After2000ms, 1)
+  event      Dropping_After2000ms
+  transition Dropping -> Done
+  exit       Dropping
+    CancelTimer(Dropping_After2000ms)
+  enter      Done
+  transition Dispensing -> Idle (choice)
+  exit       Done
+  exit       Dispensing
+    closeFlap()
+  enter      Idle
+    showWelcome()
+DispatchCoin(200)
+  event      Coin
+  transition Idle -> Ready (choice)
+  exit       Idle
+    addCredit(200) -> credit 200
+  enter      Ready
+    showSelect()
+DispatchCoin(400)
+  event      Coin
+  transition Ready (internal)
+    addCredit(400) -> credit 600
+    credit limit exceeded: Post(Cancel)
+  event      Cancel
+  transition Ready -> Idle
+  exit       Ready
+    refund() -> 600 returned
+  enter      Idle
+    showWelcome()
+final state: Idle
