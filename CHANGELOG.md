@@ -3,6 +3,16 @@
 
 # Changelog
 
+## 1.2.0
+
+### Editor
+- **Layout** spreads diagrams in both directions instead of one long row: every container is arranged as a layered flow left to right, as a layered flow top to bottom, and organically, and the most compact, screen-shaped arrangement is kept. Regions, which are stacked, aim at a correspondingly wider shape.
+- Transition labels show the event, `[guard]` and `/ action` on separate lines. A label sits on the outer side of a bent transition, above a straight one, and beside a steep one, clear of the line. Internal transitions inside a state keep their one-line form.
+- Dragging a transition label bends the transition from where it was grabbed, so the curve no longer jumps to the pointer.
+- **Self loops can be reshaped**: drag a self transition (or its label) to move the loop round its state and make it larger or smaller. The shape is stored as `loop: { angle, size }` on the transition (presentation only, ignored by older versions). *Reset loop* in the properties panel, or *Layout*, returns it to its default place.
+- Several self loops on one state no longer nest at the top-right corner, where their labels overlapped: without a dragged shape they take different places round the state (top-right corner, right, top, bottom-right corner, …).
+- *Fit* takes in everything drawn, including loops and labels beyond the states.
+
 ## 1.1.0
 
 ### Stateflow import

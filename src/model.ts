@@ -110,6 +110,12 @@ export interface TransitionNode {
     action?: string;
     /** Curvature of the drawn arrow (layout only). */
     bend?: number;
+    /**
+     * Shape of a self transition's loop, set by dragging it (layout only): `angle` is the direction in
+     * degrees (clockwise from the positive x axis, as on screen) from the state's centre to where the loop
+     * leaves the outline, `size` how far it reaches out. Without it the editor picks a default place.
+     */
+    loop?: { angle: number; size: number };
     /** Optional stroke colour used by the editor. */
     color?: string;
     /** Self transition that runs its action without exiting or re-entering the state. */

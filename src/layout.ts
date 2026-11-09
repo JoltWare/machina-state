@@ -1,7 +1,7 @@
 // Copyright (c) 2026 JoltWare
 // SPDX-License-Identifier: Apache-2.0
 
-// Automatic layout of a diagram with the Eclipse Layout Kernel (elkjs, layered algorithm).
+// Automatic layout of a diagram with the Eclipse Layout Kernel (elkjs: layered, stress and sporeOverlap).
 // Containers (the top level, composite states and regions) are laid out bottom-up: each one is a flat
 // graph of its direct children, with transitions between nested states lifted to those children.
 //
@@ -16,8 +16,11 @@
 //    such a state, which analyze rejects, are parked in a row below the regions).
 // 2. Lay out each other container with ELK as a flat graph of its direct children. A transition whose ends
 //    are nested deeper is "lifted": each end is replaced by the direct child that contains it, so related
-//    subtrees are still placed near each other. Each child's resulting position is stored relative to the
-//    container's content origin (`local`), and so is the ELK route of every edge (`routes`).
+//    subtrees are still placed near each other. The graph is arranged three ways (layered left to right,
+//    layered top to bottom, organic) and the arrangement closest to a screen-shaped, compact area is kept
+//    (score), so a diagram spreads in both directions instead of becoming a long strip. Each child's
+//    resulting position is stored relative to the container's content origin (`local`), and so is the ELK
+//    route of every edge of a layered arrangement (`routes`).
 // 3. Place: walk the tree top-down converting the relative positions into absolute diagram coordinates
 //    (the root content starts at MARGIN; a child's content starts at its position plus its padding) and
 //    write x/y/w/h back into the states. Regions are then stretched to the full width of their state.
@@ -29,7 +32,6 @@
 // ELK computes no geometry for the text itself, and the extension host has no font metrics, so text widths
 // are estimated from character counts (textWidth).
 import ELK from 'elkjs/lib/elk.bundled.js';
-import type { ElkNode } from 'elkjs/lib/elk-api';
 import { Diagram, StateNode, TransitionNode } from './model';
 
 /** Height of one text line (entry/exit/internal transition) under a state's name. */
@@ -48,6 +50,142 @@ const elk = new ELK();
 const PARK_GAP = 40;
 /** Largest bend derived from an ELK route, in either direction. */
 const MAX_BEND = 250;
+
+/** Preferred width / height of a laid-out container (a landscape screen shape). */
+const ASPECT = 1.6;
+/** Factor on the score of every arrangement but the first, so that an alternative must be clearly better. */
+const ALTERNATIVE_PENALTY = 1.15;
+/** Padding around the content of an ELK graph (ELK's default for the root of a graph). */
+const ELK_PADDING = 12;
+/** Desired length of an edge in the organic arrangement, plus the width of its label. */
+const EDGE_LENGTH = 120;
+/** Smallest gap between two nodes of the organic arrangement. */
+const ORGANIC_GAP = 80;
+
+/**
+ * How well a laid-out container of the given size fits on a screen; smaller is better. The area is
+ * multiplied by how far the shape is from the `aspect` (width / height) aimed at: 1 for exactly that
+ * aspect, 2 for twice as wide or twice as tall. So both wasted space and long strips in either direction
+ * count against an arrangement.
+ */
+function score(w: number, h: number, aspect: number): number {
+    const ratio = Math.max(w, 1) / Math.max(h, 1) / aspect;
+    return w * h * Math.max(ratio, 1 / ratio);
+}
+
+/** A node of the flat graph of one container: a direct child with its measured size. */
+interface GraphNode {
+    id: string;
+    width: number;
+    height: number;
+}
+/** An edge of the flat graph of one container, with the estimated size of its label. */
+interface GraphEdge {
+    id: string;
+    sources: [string];
+    targets: [string];
+    labels: { text: string; width: number; height: number }[];
+}
+/**
+ * The result of arranging a flat graph: each node's top-left corner and each edge's route (start point,
+ * bend points, end point; only from the layered arrangements), relative to the graph's origin, and the
+ * size of the graph including ELK_PADDING on every side.
+ */
+interface Arrangement {
+    positions: Map<string, Point>;
+    routes: Map<string, Point[]>;
+    w: number;
+    h: number;
+}
+
+/**
+ * Arranges a flat graph with ELK's layered algorithm: the flow runs in `direction` (left to right or top
+ * to bottom), with the nodes in layers across it and room for the edge labels between the layers. `nodes`
+ * are in the order that guides the layering (see layoutContainer).
+ */
+async function layered(nodes: GraphNode[], edges: GraphEdge[], direction: 'RIGHT' | 'DOWN'): Promise<Arrangement> {
+    const result = await elk.layout({
+        id: 'root',
+        layoutOptions: {
+            'elk.algorithm': 'layered',
+            'elk.direction': direction,
+            'elk.spacing.nodeNode': '40',
+            'elk.layered.spacing.nodeNodeBetweenLayers': '70',
+            'elk.spacing.edgeLabel': '4',
+            'elk.edgeLabels.inline': 'false',
+            'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
+            'elk.layered.cycleBreaking.strategy': 'MODEL_ORDER',
+            'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES'
+        },
+        // Copies: ELK writes its results into the graph it is given.
+        children: nodes.map(n => ({ ...n })),
+        edges: edges.map(e => ({ ...e, labels: e.labels.map(l => ({ ...l })) }))
+    });
+    const routes = new Map<string, Point[]>();
+    for (const e of result.edges ?? []) {
+        const section = e.sections?.[0];
+        if (section) {
+            routes.set(e.id, [section.startPoint, ...(section.bendPoints ?? []), section.endPoint]);
+        }
+    }
+    return {
+        positions: new Map((result.children ?? []).map(n => [n.id, { x: Math.round(n.x ?? 0), y: Math.round(n.y ?? 0) }])),
+        routes,
+        w: Math.round(result.width ?? 0),
+        h: Math.round(result.height ?? 0)
+    };
+}
+
+/**
+ * Arranges a flat graph organically, spread in both directions: ELK's stress algorithm places connected
+ * nodes about EDGE_LENGTH plus the label width apart (it ignores the size of the nodes), then ELK's
+ * sporeOverlap algorithm pushes overlapping nodes apart until they are at least ORGANIC_GAP apart. The
+ * result has no reading direction of its own, so it is mirrored to put the initial pseudostates (`initials`)
+ * towards the top left, where a reader starts. There are no edge routes: the transitions are drawn
+ * straight.
+ */
+async function organic(nodes: GraphNode[], edges: GraphEdge[], initials: string[]): Promise<Arrangement> {
+    const stressed = await elk.layout({
+        id: 'root',
+        layoutOptions: { 'elk.algorithm': 'stress' },
+        children: nodes.map(n => ({ ...n })),
+        edges: edges.map(e => ({
+            id: e.id,
+            sources: e.sources,
+            targets: e.targets,
+            layoutOptions: { 'elk.stress.desiredEdgeLength': String(EDGE_LENGTH + (e.labels[0]?.width ?? 0)) }
+        }))
+    });
+    const separated = await elk.layout({
+        id: 'root',
+        layoutOptions: { 'elk.algorithm': 'sporeOverlap', 'elk.spacing.nodeNode': String(ORGANIC_GAP) },
+        children: (stressed.children ?? []).map(c => ({ id: c.id, x: c.x, y: c.y, width: c.width, height: c.height }))
+    });
+    const boxes = (separated.children ?? []).map(c => ({ id: c.id, x: c.x ?? 0, y: c.y ?? 0, w: c.width ?? 0, h: c.height ?? 0 }));
+    const minX = Math.min(...boxes.map(b => b.x));
+    const minY = Math.min(...boxes.map(b => b.y));
+    const maxX = Math.max(...boxes.map(b => b.x + b.w));
+    const maxY = Math.max(...boxes.map(b => b.y + b.h));
+    // Mirror an axis if the initial pseudostates lie, on average, in its far half.
+    const starts = boxes.filter(b => initials.includes(b.id));
+    const mean = (f: (b: (typeof boxes)[number]) => number) => starts.reduce((sum, b) => sum + f(b), 0) / starts.length;
+    const flipX = starts.length > 0 && mean(b => b.x + b.w / 2) > (minX + maxX) / 2;
+    const flipY = starts.length > 0 && mean(b => b.y + b.h / 2) > (minY + maxY) / 2;
+    return {
+        positions: new Map(
+            boxes.map(b => [
+                b.id,
+                {
+                    x: Math.round((flipX ? maxX - b.x - b.w : b.x - minX) + ELK_PADDING),
+                    y: Math.round((flipY ? maxY - b.y - b.h : b.y - minY) + ELK_PADDING)
+                }
+            ])
+        ),
+        routes: new Map(),
+        w: Math.round(maxX - minX + 2 * ELK_PADDING),
+        h: Math.round(maxY - minY + 2 * ELK_PADDING)
+    };
+}
 
 /** Estimated width in pixels of `text` at `perChar` pixels per character (8.5 for names, 6.6 for other text). */
 const textWidth = (text: string | undefined, perChar: number) => Math.ceil((text ?? '').length * perChar);
@@ -110,7 +248,7 @@ function transitionFrame(s: Shape, d: Shape) {
  * The midpoint (t = 0.5) of the curve the webview draws for a transition from `s` to `d` with `bend`: a
  * quadratic Bezier whose control point lies `bend` along the frame's normal from the frame's midpoint, with
  * its end points moved towards the control point when bent (media/editor.js transitionGeometry). This is
- * also where the webview puts the label (6 px above).
+ * also where the webview puts the label (beside it, on the outer side of the curve).
  */
 export function curveMidpoint(s: Shape, d: Shape, bend: number): Point {
     const f = transitionFrame(s, d);
@@ -182,31 +320,40 @@ export function polylineMidpoint(points: Point[]): Point {
 }
 
 /**
- * The label text of a transition, used to size ELK edge labels and the internal-transition lines of a state.
- * The form depends on the source: from an initial pseudostate only `/ action` (empty if there is no action);
- * from a choice point `[guard] / action`, with `else` for a branch without a guard; otherwise
- * `event [guard] / action`, leaving out the parts that are empty.
+ * The parts of a transition's label, one per line as the webview draws them on an arrow
+ * (media/editor.js transitionLabelLines). The form depends on the source: from an initial pseudostate only
+ * `/ action` (none if there is no action); from a choice point `[guard]` and `/ action`, with `else` for a
+ * branch without a guard; otherwise `event`, `[guard]` and `/ action`, leaving out the parts that are empty.
  *
  * @param t      The transition.
  * @param source Its source state, if it exists.
  */
-function label(t: TransitionNode, source: StateNode | undefined): string {
+function labelLines(t: TransitionNode, source: StateNode | undefined): string[] {
     const action = (t.action ?? '').trim();
+    const actionLine = action ? [`/ ${action}`] : [];
     if (source?.kind === 'initial') {
-        return action ? `/ ${action}` : '';
-    }
-    if (source?.kind === 'choice') {
-        return `[${(t.guard ?? '').trim() || 'else'}]${action ? ` / ${action}` : ''}`;
+        return actionLine;
     }
     const guard = (t.guard ?? '').trim();
-    return `${(t.event ?? '').trim()}${guard ? ` [${guard}]` : ''}${action ? ` / ${action}` : ''}`;
+    if (source?.kind === 'choice') {
+        return [`[${guard || 'else'}]`, ...actionLine];
+    }
+    const event = (t.event ?? '').trim();
+    return [...(event ? [event] : []), ...(guard ? [`[${guard}]`] : []), ...actionLine];
 }
+
+/** The label of a transition on one line, as the internal-transition lines inside a state show it. */
+const label = (t: TransitionNode, source: StateNode | undefined): string => labelLines(t, source).join(' ');
+
+/** Height of one line of a transition label (media/editor.js LABEL_LINE). */
+const LABEL_LINE = 13;
 
 /**
  * Lays out the diagram in place and returns it. Sizes of simple states are derived from their text.
  *
- * Overwrites x, y, w and h of every state and sets or removes `bend` on transitions between different
- * states; self transitions keep their bend. Names, ids, nesting and all other properties are untouched.
+ * Overwrites x, y, w and h of every state, sets or removes `bend` on transitions between different states
+ * and removes the dragged shape (`loop`) of self transitions, which return to their default place. Names,
+ * ids, nesting and all other properties are untouched.
  *
  * @param d The diagram to rearrange (mutated).
  * @returns The same diagram object.
@@ -289,7 +436,7 @@ export async function autoLayout(d: Diagram): Promise<Diagram> {
         // ELK edges for every transition that runs between two different children of this container,
         // after lifting. Transitions that leave the container, internal transitions and transitions inside
         // a single child (handled when that child's content is laid out, or self transitions) are skipped.
-        const edges = [];
+        const edges: GraphEdge[] = [];
         for (const t of d.transitions) {
             const s = byId.get(t.source);
             const e = byId.get(t.target);
@@ -301,18 +448,21 @@ export async function autoLayout(d: Diagram): Promise<Diagram> {
             if (!a || !b || a === b) {
                 continue;
             }
-            const text = label(t, s);
+            const lines = labelLines(t, s);
             edges.push({
                 id: t.id,
                 sources: [a],
                 targets: [b],
-                // Label size estimate so that ELK reserves space for it; 14 px is one line of label text.
-                labels: text ? [{ text, width: textWidth(text, 6.6), height: 14 }] : []
+                // Label size estimate so that ELK reserves space for it: the widest line, LABEL_LINE per line.
+                labels: lines.length
+                    ? [{ text: lines.join('\n'), width: Math.max(...lines.map(x => textWidth(x, 6.6))), height: LABEL_LINE * lines.length + 2 }]
+                    : []
             });
         }
         // Breadth-first order from the initial pseudostate, so that cycles are broken against the flow.
         // Children not reachable from an initial pseudostate keep their document order at the end. With the
-        // MODEL_ORDER options below, this order also guides ELK's layering and the order within layers.
+        // MODEL_ORDER options of the layered arrangement, this order also guides ELK's layering and the order
+        // within layers.
         const order: string[] = kids.filter(k => k.kind === 'initial').map(k => k.id);
         for (let i = 0; i < order.length; i++) {
             for (const e of edges) {
@@ -322,39 +472,43 @@ export async function autoLayout(d: Diagram): Promise<Diagram> {
             }
         }
         kids.filter(k => !order.includes(k.id)).forEach(k => order.push(k.id));
-        // Left-to-right layered layout. Edge labels are placed beside the edges (not inline) so ELK makes
-        // room for them between layers.
-        const graph: ElkNode = {
-            id: 'root',
-            layoutOptions: {
-                'elk.algorithm': 'layered',
-                'elk.direction': 'RIGHT',
-                'elk.spacing.nodeNode': '40',
-                'elk.layered.spacing.nodeNodeBetweenLayers': '70',
-                'elk.spacing.edgeLabel': '4',
-                'elk.edgeLabels.inline': 'false',
-                'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
-                'elk.layered.cycleBreaking.strategy': 'MODEL_ORDER',
-                'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES'
-            },
-            children: order.map(id => ({ id, width: size.get(id)!.w, height: size.get(id)!.h })),
-            edges
-        };
-        const result = await elk.layout(graph);
-        for (const n of result.children ?? []) {
-            local.set(n.id, { x: Math.round(n.x ?? 0), y: Math.round(n.y ?? 0) });
-        }
-        // Keep each edge's route for the bend calculation, which needs the final absolute positions of the
-        // transition's real end points and therefore runs after placement. Edge coordinates are relative to
-        // the same origin as the children's positions (the edges belong to the root of this flat graph).
-        for (const e of result.edges ?? []) {
-            const section = e.sections?.[0];
-            if (section) {
-                routes.set(e.id, { container: id, points: [section.startPoint, ...(section.bendPoints ?? []), section.endPoint] });
+        // Arrange the graph in each of three ways and keep the one that fits a screen best (see score): the
+        // layered flow left to right (the default, preferred on a tie) or top to bottom, which suit chains
+        // and trees, and the organic arrangement, which spreads a graph with many cycles in both directions
+        // instead of stretching it into a long strip. An arrangement that fails is skipped.
+        // The regions of a state are stacked vertically, so each of n regions aims at an n times wider shape
+        // to keep the whole state near ASPECT.
+        const regions = owner?.kind === 'region' ? childrenOf(owner.parent ?? null).filter(r => r.kind === 'region').length : 1;
+        const aspect = ASPECT * Math.max(1, regions);
+        const nodes = order.map(k => ({ id: k, width: size.get(k)!.w, height: size.get(k)!.h }));
+        const initials = kids.filter(k => k.kind === 'initial').map(k => k.id);
+        const arrangements = [() => layered(nodes, edges, 'RIGHT'), () => layered(nodes, edges, 'DOWN'), () => organic(nodes, edges, initials)];
+        let result: Arrangement | undefined;
+        let best = Infinity;
+        let failure: unknown;
+        for (const [i, arrange] of arrangements.entries()) {
+            let candidate: Arrangement;
+            try {
+                candidate = await arrange();
+            } catch (err) {
+                failure = err;
+                continue;
+            }
+            const s = score(candidate.w, candidate.h, aspect) * (i === 0 ? 1 : ALTERNATIVE_PENALTY);
+            if (s < best) {
+                best = s;
+                result = candidate;
             }
         }
-        // The content size is the size ELK computed for the whole graph.
-        return { w: Math.round(result.width ?? 0), h: Math.round(result.height ?? 0) };
+        if (!result) {
+            throw failure;
+        }
+        result.positions.forEach((p, k) => local.set(k, p));
+        // Keep each edge's route for the bend calculation, which needs the final absolute positions of the
+        // transition's real end points and therefore runs after placement. Edge coordinates are relative to
+        // the same origin as the children's positions.
+        result.routes.forEach((points, k) => routes.set(k, { container: id, points }));
+        return { w: result.w, h: result.h };
     }
 
     /**
@@ -449,6 +603,7 @@ export async function autoLayout(d: Diagram): Promise<Diagram> {
     const pairs = new Map<string, TransitionNode[]>();
     for (const t of d.transitions) {
         if (t.source === t.target) {
+            delete t.loop;
             continue;
         }
         const bend = routedBend.get(t.id) ?? 0;

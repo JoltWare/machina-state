@@ -942,3 +942,75 @@ uiWith('the simulator counts steps for after() under Stateflow semantics', state
     assert.match(await e.active(), /Fill/);
     assert.ok((await e.log()).some(l => /idleTick/.test(l)), 'the during action of Idle ran');
 });
+
+// A -Go [ok] / run-> B (straight, horizontal) and A -Down-> C (straight, vertical).
+const labelDiagram = JSON.stringify({
+    name: 'Labels',
+    states: [
+        { id: 'init', name: 'Initial', kind: 'initial', parent: null, x: 0, y: 200, w: 24, h: 24 },
+        { id: 'a', name: 'A', kind: 'state', parent: null, x: 60, y: 0, w: 120, h: 60 },
+        { id: 'b', name: 'B', kind: 'state', parent: null, x: 460, y: 0, w: 120, h: 60 },
+        { id: 'c', name: 'C', kind: 'state', parent: null, x: 60, y: 300, w: 120, h: 60 }
+    ],
+    transitions: [
+        { id: 't0', source: 'init', target: 'a', event: '', guard: '', action: '' },
+        { id: 't1', source: 'a', target: 'b', event: 'Go', guard: 'ok', action: 'run' },
+        { id: 't2', source: 'a', target: 'c', event: 'Down', guard: '', action: '' }
+    ]
+});
+
+uiWith('transition labels have a line per part, beside the arrow', labelDiagram, async e => {
+    assert.deepEqual(await e.page.locator('g.edge[data-id="t1"] .label tspan').allTextContents(), ['Go', '[ok]', '/ run']);
+    assert.deepEqual(await e.page.locator('g.edge[data-id="t2"] .label tspan').allTextContents(), ['Down']);
+    const box = (id, part) => e.page.locator(`g.edge[data-id="${id}"] .${part}`).boundingBox();
+    const [label1, line1, label2, line2] = [await box('t1', 'label'), await box('t1', 'line'), await box('t2', 'label'), await box('t2', 'line')];
+    // The box of a line includes its arrowhead, so the straight line itself runs through the middle.
+    assert.ok(label1.y + label1.height < line1.y + line1.height / 2, 'the label of a horizontal arrow lies above it');
+    assert.ok(label2.x > line2.x + line2.width / 2, 'the label of a vertical arrow lies to its right');
+});
+
+uiWith('grabbing a label does not bend its transition until the pointer moves', labelDiagram, async e => {
+    // Grab the top line of the label, well away from the arrow, move away and back, and let go.
+    const top = await e.page.locator('g.edge[data-id="t1"] .label tspan').first().boundingBox();
+    const p = { x: top.x + top.width / 2, y: top.y + top.height / 2 };
+    const count = await e.edits();
+    await e.page.mouse.move(p.x, p.y);
+    await e.page.mouse.down();
+    await e.page.mouse.move(p.x, p.y + 40, { steps: 4 });
+    await e.page.mouse.move(p.x, p.y, { steps: 4 });
+    await e.page.mouse.up();
+    await e.waitForEdit(count);
+    assert.equal((await e.edited()).transitions.find(t => t.id === 't1').bend || 0, 0);
+});
+
+// Initial -> A, and a self loop on A.
+const loopDiagram = JSON.stringify({
+    name: 'Loop',
+    states: [
+        { id: 'init', name: 'Initial', kind: 'initial', parent: null, x: 0, y: 120, w: 24, h: 24 },
+        { id: 'a', name: 'A', kind: 'state', parent: null, x: 200, y: 100, w: 140, h: 70 }
+    ],
+    transitions: [
+        { id: 't0', source: 'init', target: 'a', event: '', guard: '', action: '' },
+        { id: 'tl', source: 'a', target: 'a', event: 'Tick', guard: '', action: '' }
+    ]
+});
+
+uiWith('dragging a self loop moves it round its state, and Reset loop puts it back', loopDiagram, async e => {
+    const label = () => e.page.locator('g.edge[data-id="tl"] .label').boundingBox();
+    const before = await label();
+    // Drag the loop by its label (top right of A) to well left of A.
+    let count = await e.edits();
+    await e.drag({ x: before.x + before.width / 2, y: before.y + before.height / 2 }, await e.screen(100, 135));
+    await e.waitForEdit(count);
+    const loop = (await e.edited()).transitions.find(t => t.id === 'tl').loop;
+    assert.ok(loop && Math.abs(loop.angle) > 150 && loop.size > 40, JSON.stringify(loop));
+    const after = await label();
+    assert.ok(after.x + after.width < (await e.screen(200, 0)).x, 'the label is left of the state');
+
+    count = await e.edits();
+    await e.panelButton('Reset loop').click();
+    await e.waitForEdit(count);
+    assert.equal((await e.edited()).transitions.find(t => t.id === 'tl').loop, undefined);
+    assert.deepEqual(await label(), before);
+});

@@ -364,29 +364,29 @@
     }
 
     /**
-     * Label of a transition in UML notation `event [guard] / action`. Initial transitions show only the
-     * action after a slash (they have no trigger or guard); choice branches show `[guard]`, with `[else]` for
-     * an empty guard, and the action. An empty string means no label is drawn.
+     * Parts of a transition's label in UML notation `event [guard] / action`, one per line as drawn on an
+     * arrow: `event`, `[guard]` and `/ action`, leaving out the empty ones. Initial transitions show only the
+     * action (they have no trigger or guard); choice branches show `[guard]`, with `[else]` for an empty
+     * guard, and the action. No lines means no label is drawn. src/layout.ts (labelLines) sizes the labels
+     * from the same lines.
      */
-    function transitionLabel(t) {
+    function transitionLabelLines(t) {
         const src = byId(t.source);
         const action = (t.action || '').trim();
+        const actionLine = action ? ['/ ' + action] : [];
         if (src && src.kind === 'initial') {
-            return action ? '/ ' + action : '';
+            return actionLine;
         }
+        const guard = (t.guard || '').trim();
         if (src && src.kind === 'choice') {
-            const guard = (t.guard || '').trim();
-            return `[${guard || 'else'}]${action ? ` / ${action}` : ''}`;
+            return [`[${guard || 'else'}]`, ...actionLine];
         }
-        let label = (t.event || '').trim();
-        if ((t.guard || '').trim()) {
-            label += ` [${t.guard.trim()}]`;
-        }
-        if (action) {
-            label += ` / ${action}`;
-        }
-        return label;
+        const event = (t.event || '').trim();
+        return [...(event ? [event] : []), ...(guard ? [`[${guard}]`] : []), ...actionLine];
     }
+
+    /** The label of a transition on one line, as the internal-transition lines inside a state show it. */
+    const transitionLabel = t => transitionLabelLines(t).join(' ');
 
     // --------------------------------------------------------------- geometry
 
@@ -433,29 +433,26 @@
     }
 
     /**
-     * SVG path and label position of a drawn (non-internal) transition: { path, label: { x, y }, anchor }.
-     * A self transition is a cubic loop from the top edge, near the top-right corner, out to the right edge;
-     * each further self loop of the same state is 16 units larger so the loops nest instead of overlapping
-     * (internal transitions are not counted, they are listed inside the state). Any other transition is a
-     * quadratic Bezier whose control point lies `bend` units along the normal from the middle of the
-     * outline-to-outline segment; when bent, the end points are recomputed towards the control point so the
-     * curve leaves and enters the shapes facing it. The label sits just above the curve's midpoint (the
-     * quadratic at t = 0.5 is p1/4 + ctrl/2 + p2/4).
+     * SVG path and label anchor of a drawn (non-internal) transition: { path, label: { x, y, out, along } }.
+     * The label is placed next to the point (x, y) on the side the unit vector `out` points to; `along` is the
+     * unit direction of the curve there (see labelPlacement).
+     * A self transition is a cubic loop out of the state's outline (see selfLoop), with its label beyond the
+     * loop's tip. Any other transition is a quadratic Bezier whose control point lies `bend` units
+     * along the normal from the middle of the outline-to-outline segment; when bent, the end points are
+     * recomputed towards the control point so the curve leaves and enters the shapes facing it. Its label
+     * sits at the curve's midpoint (the quadratic at t = 0.5 is p1/4 + ctrl/2 + p2/4, where the curve runs
+     * parallel to p1 -> p2), on the outer side of a bent curve, so it never lies between the curve and its
+     * chord, and above a straight transition (to the right of a steep one).
      */
     function transitionGeometry(t) {
         const s = byId(t.source);
         const d = byId(t.target);
         if (s === d) {
-            const loops = diagram.transitions.filter(x => x.source === s.id && x.target === s.id && !isInternal(x));
-            const off = loops.indexOf(t) * 16;
-            const sx = s.x + s.w - 24 - off;
-            const sy = s.y;
-            const ex = s.x + s.w;
-            const ey = s.y + 24 + off;
+            const { angle, size } = loopShape(t);
+            const g = selfLoop(s, angle, size);
             return {
-                path: `M ${sx} ${sy} C ${sx} ${sy - 40 - off}, ${ex + 40 + off} ${ey}, ${ex} ${ey}`,
-                label: { x: ex + 12 + off, y: sy - 18 - off },
-                anchor: 'start'
+                path: `M ${g.p0.x} ${g.p0.y} C ${g.c1.x} ${g.c1.y}, ${g.c2.x} ${g.c2.y}, ${g.p3.x} ${g.p3.y}`,
+                label: { x: g.tip.x, y: g.tip.y, out: g.dir, along: { x: -g.dir.y, y: g.dir.x } }
             };
         }
         const f = frame(t);
@@ -465,7 +462,171 @@
         const p2 = bend ? boundaryPoint(d, ctrl) : f.p2;
         const lx = 0.25 * p1.x + 0.5 * ctrl.x + 0.25 * p2.x;
         const ly = 0.25 * p1.y + 0.5 * ctrl.y + 0.25 * p2.y;
-        return { path: `M ${p1.x} ${p1.y} Q ${ctrl.x} ${ctrl.y} ${p2.x} ${p2.y}`, label: { x: lx, y: ly - 6 }, anchor: 'middle' };
+        const len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const along = len > 0 ? { x: (p2.x - p1.x) / len, y: (p2.y - p1.y) / len } : { x: 1, y: 0 };
+        // Outer side: the side the curve is bent to; for a straight transition the upper side of the two
+        // normals, or the right one when the transition is steep (|n.y| small).
+        const flip = bend ? bend < 0 : Math.abs(f.n.y) < LABEL_DIAGONAL ? f.n.x < 0 : f.n.y > 0;
+        const out = flip ? { x: -f.n.x, y: -f.n.y } : f.n;
+        return { path: `M ${p1.x} ${p1.y} Q ${ctrl.x} ${ctrl.y} ${p2.x} ${p2.y}`, label: { x: lx, y: ly, out, along } };
+    }
+
+    // Self loops: the default size (how far the loop's control points lie from the outline), the range a
+    // drag can give, and how much larger each further round of default positions is (see loopShape).
+    const LOOP_SIZE = 40;
+    const LOOP_MIN = 20;
+    const LOOP_MAX = 300;
+    const LOOP_ROUND = 16;
+
+    /** The stored shape of a self loop, `t.loop` = { angle, size }, or null if it has none (or a broken one). */
+    const storedLoop = t => (t.loop && Number.isFinite(t.loop.angle) && Number.isFinite(t.loop.size) ? t.loop : null);
+
+    /**
+     * Where a self loop sits and how large it is: { angle, size }, with `angle` the direction (degrees,
+     * clockwise from the positive x axis, as on screen) from the state's centre to the point of the outline
+     * the loop grows out of. A loop the user has dragged keeps its stored shape (`t.loop`, size limited to
+     * LOOP_MIN..LOOP_MAX). The other loops of a state take default positions by their place among the
+     * state's loops, so that neither their
+     * curves nor their labels overlap: the top-right corner (where a single loop always went), the middle of
+     * the right edge, the middle of the top edge, the bottom-right corner, then the left, the bottom, the
+     * top-left and the bottom-left; each further round of eight is LOOP_ROUND larger. Internal transitions
+     * are not counted, they are listed inside the state.
+     */
+    function loopShape(t) {
+        const stored = storedLoop(t);
+        if (stored) {
+            return { angle: stored.angle, size: Math.min(LOOP_MAX, Math.max(LOOP_MIN, stored.size)) };
+        }
+        const s = byId(t.source);
+        // The slot is the loop's place among all loops of the state, dragged ones included, so that dragging
+        // one loop does not move the others.
+        const k = diagram.transitions.filter(x => x.source === s.id && x.target === s.id && !isInternal(x)).indexOf(t);
+        const corner = (sx, sy) => (Math.atan2(sy * s.h, sx * s.w) * 180) / Math.PI;
+        const spots = [corner(1, -1), 0, -90, corner(1, 1), 180, 90, corner(-1, -1), corner(-1, 1)];
+        return { angle: spots[k % spots.length], size: LOOP_SIZE + LOOP_ROUND * Math.floor(k / spots.length) };
+    }
+
+    /**
+     * Position of a point on (or near) a box's outline, as the distance clockwise round the outline from the
+     * box's top-left corner, measured on the nearest edge (the top edge first on a tie, so a top corner
+     * counts as the end of the top edge).
+     */
+    function outlineOffset(s, p) {
+        const edges = [
+            [Math.abs(p.y - s.y), p.x - s.x],
+            [Math.abs(p.x - (s.x + s.w)), s.w + p.y - s.y],
+            [Math.abs(p.y - (s.y + s.h)), s.w + s.h + s.x + s.w - p.x],
+            [Math.abs(p.x - s.x), 2 * s.w + s.h + s.y + s.h - p.y]
+        ];
+        return edges.reduce((best, e) => (e[0] < best[0] ? e : best))[1];
+    }
+
+    /** The point of a box's outline `u` clockwise round it from its top-left corner (inverse of outlineOffset). */
+    function outlinePoint(s, u) {
+        let r = ((u % (2 * (s.w + s.h))) + 2 * (s.w + s.h)) % (2 * (s.w + s.h));
+        if (r < s.w) {
+            return { x: s.x + r, y: s.y };
+        }
+        r -= s.w;
+        if (r < s.h) {
+            return { x: s.x + s.w, y: s.y + r };
+        }
+        r -= s.h;
+        if (r < s.w) {
+            return { x: s.x + s.w - r, y: s.y + s.h };
+        }
+        return { x: s.x, y: s.y + s.h - (r - s.w) };
+    }
+
+    /**
+     * Geometry of a self loop of `s` at `angle` with `size` (see loopShape): { p0, c1, c2, p3, tip, dir }.
+     * The loop is a cubic Bezier p0 -> p3 whose ends lie on the outline on either side of the point B where
+     * the ray from the centre at `angle` leaves it, 12 + 0.3·size apart from B measured round the outline
+     * (on a circle, the shape of pseudostates, by angle), clockwise; both control points lie `size` beyond
+     * their end in the ray's direction `dir`. At a corner the ends lie on the two edges that meet there. The
+     * curve's midpoint, its tip, is (p0 + p3) / 2 + 0.75·size·dir; the label goes beyond it.
+     */
+    function selfLoop(s, angle, size) {
+        const a = (angle * Math.PI) / 180;
+        const dir = { x: Math.cos(a), y: Math.sin(a) };
+        const c = center(s);
+        const spread = 12 + 0.3 * size;
+        let p0;
+        let p3;
+        if (s.kind === 'state') {
+            const u = outlineOffset(s, boundaryPoint(s, { x: c.x + dir.x, y: c.y + dir.y }));
+            const half = Math.min(spread, (s.w + s.h) / 2);
+            p0 = outlinePoint(s, u - half);
+            p3 = outlinePoint(s, u + half);
+        } else {
+            const r = s.w / 2;
+            const da = Math.min(spread / r, 0.9);
+            p0 = { x: c.x + r * Math.cos(a - da), y: c.y + r * Math.sin(a - da) };
+            p3 = { x: c.x + r * Math.cos(a + da), y: c.y + r * Math.sin(a + da) };
+        }
+        return {
+            p0,
+            c1: { x: p0.x + dir.x * size, y: p0.y + dir.y * size },
+            c2: { x: p3.x + dir.x * size, y: p3.y + dir.y * size },
+            p3,
+            tip: { x: (p0.x + p3.x) / 2 + 0.75 * size * dir.x, y: (p0.y + p3.y) / 2 + 0.75 * size * dir.y },
+            dir
+        };
+    }
+
+    /**
+     * The shape { angle, size } (rounded as stored) that puts the tip of a self loop of `s` at `p`, as
+     * closely as the shape allows: the angle points from the centre at `p`, and the size moves the tip to
+     * `p`'s distance along that direction (solved by a few fixed-point steps, because the ends of the loop,
+     * and so the tip, move a little with the size). A tip inside the state gives the smallest loop.
+     */
+    function loopThrough(s, p) {
+        const c = center(s);
+        const angle = (Math.atan2(p.y - c.y, p.x - c.x) * 180) / Math.PI;
+        let size = LOOP_SIZE;
+        for (let i = 0; i < 4; i++) {
+            const g = selfLoop(s, angle, size);
+            const base = { x: g.tip.x - 0.75 * size * g.dir.x, y: g.tip.y - 0.75 * size * g.dir.y };
+            size = Math.min(LOOP_MAX, Math.max(LOOP_MIN, ((p.x - base.x) * g.dir.x + (p.y - base.y) * g.dir.y) / 0.75));
+        }
+        return { angle: Math.round(angle), size: Math.round(size) };
+    }
+
+    // Transition labels: line height, distance from the curve, and the estimated width of a character, in
+    // diagram units (the label font is the editor's, usually monospaced, at 11.5px).
+    const LABEL_LINE = 13;
+    const LABEL_GAP = 5;
+    const LABEL_CHAR = 7;
+    // A component of a label's `out` direction smaller than this (sin 22.5°) counts as zero: the label is
+    // centred on that axis instead of being placed beside the point along it.
+    const LABEL_DIAGONAL = 0.38;
+
+    /**
+     * Where the lines of a transition label go: { x, y, anchor }, with (x, y) the baseline start of the first
+     * line, `anchor` the SVG text-anchor of all lines and LABEL_LINE between baselines. The label block is
+     * put on the side of the anchor point that `out` points to, in one of eight directions: beside it
+     * (centred vertically) when `out` is roughly horizontal, above or below it (centred horizontally) when
+     * roughly vertical, and with a corner at the point otherwise. Every point of the block then lies on the
+     * `out` side of the line through the anchor point along `along`, at least LABEL_GAP away; for a centred
+     * block that takes an extra offset growing with the line's slope, from the estimated text size.
+     *
+     * @param label The `label` of transitionGeometry.
+     * @param lines The label's lines.
+     */
+    function labelPlacement(label, lines) {
+        const { out, along } = label;
+        const height = LABEL_LINE * lines.length;
+        const width = LABEL_CHAR * Math.max(...lines.map(l => l.length));
+        const ascent = 9; // baseline below the top of a line, for the 11.5px font
+        const h = out.x > LABEL_DIAGONAL ? 1 : out.x < -LABEL_DIAGONAL ? -1 : 0;
+        const v = out.y > LABEL_DIAGONAL ? 1 : out.y < -LABEL_DIAGONAL ? -1 : 0;
+        // Extra distance that clears a sloped line under a block centred on the other axis.
+        const slopeX = h && !v ? (height / 2) * Math.abs(along.x / (along.y || 1)) : 0;
+        const slopeY = v && !h ? (width / 2) * Math.abs(along.y / (along.x || 1)) : 0;
+        const x = label.x + h * (LABEL_GAP + slopeX);
+        const y = label.y + v * (LABEL_GAP + slopeY);
+        const top = v < 0 ? y - height : v > 0 ? y : y - height / 2;
+        return { x, y: top + ascent, anchor: h > 0 ? 'start' : h < 0 ? 'end' : 'middle' };
     }
 
     // -------------------------------------------------------------- rendering
@@ -628,9 +789,13 @@
         const marker = fired ? 'fired' : selected ? 'selected' : untaken ? 'uncovered' : color;
         g.appendChild(svgEl('path', { class: 'hit', d: geo.path }));
         g.appendChild(svgEl('path', { class: 'line', d: geo.path, 'marker-end': arrowMarker(marker) }));
-        const label = transitionLabel(t);
-        if (label) {
-            g.appendChild(svgEl('text', { class: 'label', x: geo.label.x, y: geo.label.y, 'text-anchor': geo.anchor }, label));
+        // The label: one tspan per line (event, guard, action), see labelPlacement.
+        const lines = transitionLabelLines(t);
+        if (lines.length) {
+            const at = labelPlacement(geo.label, lines);
+            const text = svgEl('text', { class: 'label', x: at.x, y: at.y, 'text-anchor': at.anchor });
+            lines.forEach((line, i) => text.appendChild(svgEl('tspan', i ? { x: at.x, dy: LABEL_LINE } : { x: at.x }, line)));
+            g.appendChild(text);
         }
         return g;
     }
@@ -866,7 +1031,7 @@
                     'div',
                     { class: 'help' },
                     el('p', {}, 'Pick a tool, then click the canvas to add elements. Drop a state inside another state to nest it; every region needs an initial pseudostate.'),
-                    el('p', {}, 'Drag with the Transition tool from source to target. Drag a transition label to bend it. Self transitions can be made internal.'),
+                    el('p', {}, 'Drag with the Transition tool from source to target. Drag a transition label to bend it, or a self loop to move it round its state. Self transitions can be made internal.'),
                     el('p', {}, 'Events: a name ("Start"), a timeout ("after(500ms)", "after(2s)") or empty for a completion transition, which fires when the state is entered or its region reaches a final state.'),
                     el('p', {}, 'A choice point (diamond) branches on guards; give one branch the guard "else". A history pseudostate (H / H*) resumes the last active substate.'),
                     el('p', {}, 'Guards and actions are method names (e.g. "isReady", "!isBusy", "open; log"). The generated class declares them as abstract hooks.'),
@@ -986,17 +1151,34 @@
                   }, 'Run the action without leaving and re-entering the state')
                 : '',
             colorField(t),
-            el(
-                'button',
-                {
-                    onclick: () => {
-                        t.bend = 0;
-                        commit();
-                        render();
-                    }
-                },
-                'Straighten'
-            )
+            // Straighten a transition between two states; return a dragged self loop to its default place. An
+            // internal transition has no arrow to reshape.
+            t.source !== t.target
+                ? el(
+                      'button',
+                      {
+                          onclick: () => {
+                              t.bend = 0;
+                              commit();
+                              render();
+                          }
+                      },
+                      'Straighten'
+                  )
+                : !isInternal(t)
+                  ? el(
+                        'button',
+                        {
+                            title: 'Move the loop back to its default place and size',
+                            onclick: () => {
+                                delete t.loop;
+                                commit();
+                                render();
+                            }
+                        },
+                        'Reset loop'
+                    )
+                  : ''
         );
     }
 
@@ -2026,10 +2208,20 @@
         if (diagram.states.length === 0) {
             view = { x: 40, y: 40, scale: 1 };
         } else {
-            const minX = Math.min(...diagram.states.map(s => s.x)) - 30;
-            const minY = Math.min(...diagram.states.map(s => s.y)) - 50;
-            const maxX = Math.max(...diagram.states.map(s => s.x + s.w)) + 60;
-            const maxY = Math.max(...diagram.states.map(s => s.y + s.h)) + 30;
+            let minX = Math.min(...diagram.states.map(s => s.x)) - 30;
+            let minY = Math.min(...diagram.states.map(s => s.y)) - 50;
+            let maxX = Math.max(...diagram.states.map(s => s.x + s.w)) + 60;
+            let maxY = Math.max(...diagram.states.map(s => s.y + s.h)) + 30;
+            // Self loops can be dragged out of any side and long labels reach further: also take in what is
+            // drawn, in diagram coordinates (rendering first, as fit may run before the diagram is drawn).
+            render();
+            const drawn = viewport.childNodes.length ? viewport.getBBox() : null;
+            if (drawn && drawn.width > 0) {
+                minX = Math.min(minX, drawn.x - 10);
+                minY = Math.min(minY, drawn.y - 10);
+                maxX = Math.max(maxX, drawn.x + drawn.width + 10);
+                maxY = Math.max(maxY, drawn.y + drawn.height + 10);
+            }
             const scale = Math.max(0.2, Math.min(1.5, r.width / (maxX - minX), r.height / (maxY - minY)));
             view = {
                 scale,
@@ -2049,7 +2241,8 @@
     //   marquee  { start, p }               Shift+drag on empty canvas: rubber-band selection
     //   move     { ids, last, moved }       dragging the selected (top-level) states; content follows
     //   resize   { id, start, w0, h0 }      dragging the corner handle
-    //   bend     { id, moved }              dragging a transition or its label
+    //   bend     { id, start, bend0, moved } dragging a transition or its label (from `start`, bend `bend0`)
+    //   loop     { id, grab, moved }        dragging a self loop or its label (`grab`: pointer minus loop tip)
     //   link     { from, p }                Transition tool: from the source to the state under the mouseup
     // The right button is ignored.
     svg.addEventListener('mousedown', e => {
@@ -2110,7 +2303,15 @@
             drag = { type: 'move', ids: topLevelOf(selectedStates()), last: p, moved: false };
         } else if (kind === 'transition') {
             select({ type: 'transition', id });
-            drag = { type: 'bend', id, moved: false };
+            const t = transitionById(id);
+            if (t.source === t.target && !isInternal(t)) {
+                // A self loop is reshaped by moving its tip; remember where it was grabbed relative to the tip.
+                const { angle, size } = loopShape(t);
+                const tip = selfLoop(byId(t.source), angle, size).tip;
+                drag = { type: 'loop', id, grab: { x: p.x - tip.x, y: p.y - tip.y }, moved: false };
+            } else {
+                drag = { type: 'bend', id, start: p, bend0: t.bend || 0, moved: false };
+            }
         }
         e.preventDefault();
     });
@@ -2144,17 +2345,25 @@
             // Minimum size MIN_WIDTH x MIN_HEIGHT (also for regions).
             s.w = Math.max(MIN_WIDTH, Math.round(drag.w0 + p.x - drag.start.x));
             s.h = Math.max(MIN_HEIGHT, Math.round(drag.h0 + p.y - drag.start.y));
+        } else if (drag.type === 'loop') {
+            // The tip of the loop follows the pointer, keeping the distance at which it was grabbed, round the
+            // state and in or out.
+            const t = transitionById(drag.id);
+            t.loop = loopThrough(byId(t.source), { x: p.x - drag.grab.x, y: p.y - drag.grab.y });
+            drag.moved = true;
         } else if (drag.type === 'bend') {
             const t = transitionById(drag.id);
-            // Self loops have a fixed shape and cannot be bent.
+            // Internal transitions, listed inside their state, have no curve to bend.
             if (t.source === t.target) {
                 return;
             }
-            // The curve midpoint (where the label sits) is offset from the chord midpoint by about bend / 2
-            // (quadratic Bezier at t = 0.5), so twice the pointer's distance along the normal makes the curve
-            // follow the pointer. Small bends snap back to straight.
-            const { mid, n } = frame(t);
-            const bend = 2 * ((p.x - mid.x) * n.x + (p.y - mid.y) * n.y);
+            // The curve midpoint (where the label sits) moves by about half the change of the bend (quadratic
+            // Bezier at t = 0.5), so changing the bend by twice the pointer's movement along the normal makes
+            // the curve follow the pointer. The movement is taken from where the gesture started, so grabbing
+            // the label, which sits beside the curve, does not make the curve jump. Small bends snap back to
+            // straight.
+            const { n } = frame(t);
+            const bend = drag.bend0 + 2 * ((p.x - drag.start.x) * n.x + (p.y - drag.start.y) * n.y);
             t.bend = Math.abs(bend) < 10 ? 0 : Math.round(bend);
             drag.moved = true;
         } else if (drag.type === 'link') {
@@ -2199,7 +2408,7 @@
             s.h = Math.max(MIN_HEIGHT, snapValue(s.y + s.h) - s.y);
             renestResized(s);
             commit();
-        } else if (d.type === 'bend') {
+        } else if (d.type === 'bend' || d.type === 'loop') {
             if (d.moved) {
                 commit();
             }
@@ -2350,7 +2559,7 @@
                 ['Shift+drag', 'Select the states in a rectangle'],
                 ['Drag', 'Move states; on empty canvas (or with the middle button), pan'],
                 ['Drag the corner handle', 'Resize a state'],
-                ['Drag a transition label', 'Curve the transition'],
+                ['Drag a transition label', 'Curve the transition; move a self loop round its state'],
                 ['Double-click a state', 'Rename it'],
                 ['Wheel', 'Zoom']
             ]

@@ -15,7 +15,7 @@
   - states, composite (nested) states, orthogonal (parallel) regions, initial and final states, history (`H`/`H*`) and choice points
   - transitions with `event [guard] / action`, internal transitions, completion transitions and `after(2s)` timeouts
   - entry and exit actions
-- **Editing**: multi-selection, align and distribute, copy/paste/duplicate, snap to grid, per-element colours and automatic layout (ELK).
+- **Editing**: multi-selection, align and distribute, copy/paste/duplicate, snap to grid, per-element colours, draggable transition curves and self loops, and automatic layout (ELK) that spreads the diagram in both directions.
 - **Simulator**: runs the same reference engine the generated code is tested against. Fire events with arguments, set guard results, let timers elapse, and watch the active states and the exit/action/entry trace. Record **scenarios**, replay them, and see which transitions are still **uncovered**.
 - **Code generation**:
   - **C++17**: header-only, no heap allocation, no exceptions or RTTI.

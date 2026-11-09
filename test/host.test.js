@@ -9,7 +9,7 @@ const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
-const { analyze, loadExample, exampleNames, root } = require('./helpers');
+const { analyze, loadExample, exampleNames, testDiagramNames, loadTestDiagram, root } = require('./helpers');
 const { locateElement, locateTopLevelKey, jsonErrorOffset, storedCodegen, importCodegen, manualUrl } = require('../out/hostUtil.js');
 const { autoLayout, boundaryPoint, curveMidpoint, bendThrough, polylineMidpoint } = require('../out/layout.js');
 
@@ -121,6 +121,7 @@ function webviewGeometry(diagram) {
     };
     const context = {
         diagram,
+        LABEL_DIAGONAL: Number(/const LABEL_DIAGONAL = ([\d.]+);/.exec(source)[1]),
         byId: id => diagram.states.find(s => s.id === id),
         center: s => ({ x: s.x + s.w / 2, y: s.y + s.h / 2 }),
         isInternal: t => t.internal === true && t.source === t.target
@@ -187,6 +188,46 @@ test('auto-layout bends are whole numbers within the limit', async () => {
             assert.ok(t.bend === undefined || (Number.isInteger(t.bend) && Math.abs(t.bend) <= 250), `${name}/${t.id}: ${t.bend}`);
         }
     }
+});
+
+test('auto-layout places the children of a container apart and inside it', async () => {
+    const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    const inside = (s, p) => s.x >= p.x && s.y >= p.y && s.x + s.w <= p.x + p.w && s.y + s.h <= p.y + p.h;
+    const diagrams = [...exampleNames().map(n => [n, loadExample(n)]), ...testDiagramNames().map(n => [n, loadTestDiagram(n)])];
+    for (const [name, d] of diagrams) {
+        await autoLayout(d);
+        const byId = new Map(d.states.map(s => [s.id, s]));
+        for (const a of d.states) {
+            assert.ok(!a.parent || inside(a, byId.get(a.parent)), `${name}: ${a.id} outside its parent`);
+            for (const b of d.states) {
+                assert.ok(a === b || a.parent !== b.parent || !overlap(a, b), `${name}: ${a.id} overlaps ${b.id}`);
+            }
+        }
+    }
+});
+
+test('auto-layout spreads a cycle of states in both directions', async () => {
+    // Initial -> S0 -> S1 -> ... -> S9 -> S0: a single layered flow would be one long row.
+    const n = 10;
+    const d = {
+        name: 'Ring',
+        states: [S('i', 'initial'), ...Array.from({ length: n }, (_, k) => S(`S${k}`))],
+        transitions: [T('t', 'i', 'S0'), ...Array.from({ length: n }, (_, k) => T(`t${k}`, `S${k}`, `S${(k + 1) % n}`, `Next${k}`))]
+    };
+    await autoLayout(d);
+    const w = Math.max(...d.states.map(s => s.x + s.w)) - Math.min(...d.states.map(s => s.x));
+    const h = Math.max(...d.states.map(s => s.y + s.h)) - Math.min(...d.states.map(s => s.y));
+    assert.ok(w / h < 3 && h / w < 3, `${w} x ${h}`);
+});
+
+test('auto-layout returns dragged self loops to their default place', async () => {
+    const d = {
+        name: 'M',
+        states: [S('i', 'initial'), S('A')],
+        transitions: [T('t0', 'i', 'A'), T('t1', 'A', 'A', 'Tick', { loop: { angle: 180, size: 90 } })]
+    };
+    await autoLayout(d);
+    assert.equal(d.transitions[1].loop, undefined);
 });
 
 test('auto-layout gives misplaced children of a state with regions a position inside it', async () => {

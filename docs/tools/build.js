@@ -96,7 +96,7 @@ const t3 = {
         initial('init', null, 60, 168),
         state('Locked', null, 140, 130, 210, 100, 'engageBolt'),
         state('Unlocked', null, 560, 140, 160, 80, 'releaseBolt'),
-        state('Alarm', null, 360, 360, 160, 80, 'sirenOn', 'sirenOff')
+        state('Alarm', null, 165, 380, 160, 80, 'sirenOn', 'sirenOff')
     ],
     transitions: [
         T('t0', 'init', 'Locked'),

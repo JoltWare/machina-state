@@ -124,7 +124,7 @@
     in C++, C\# and C --- switch-based or table-based.
   \end{minipage}\par
   \vfill
-  {\large Version 1.1.0 \quad\textbullet\quad \today\par}
+  {\large Version 1.2.0 \quad\textbullet\quad \today\par}
 \end{titlepage}
 
 \pagenumbering{roman}
@@ -274,11 +274,11 @@ Generated C code   & A C99 compiler. Uses only \code{<stdbool.h>} and \code{<std
 \begin{enumerate}
   \item Open the \ui{Extensions} view (\key{Ctrl}+\key{Shift}+\key{X}).
   \item Click the \ui{\dots} menu at the top of the view and choose \ui{Install from VSIX\dots}.
-  \item Select \code{machina-state-1.1.0.vsix} and reload VS Code if asked.
+  \item Select \code{machina-state-1.2.0.vsix} and reload VS Code if asked.
 \end{enumerate}
 Alternatively, install from a terminal:
 \begin{lstlisting}[language=bash]
-code --install-extension machina-state-1.1.0.vsix
+code --install-extension machina-state-1.2.0.vsix
 \end{lstlisting}
 
 \section{Building from source}
@@ -661,13 +661,13 @@ This tutorial builds an electronic door lock that is opened with a numeric code.
   \node[init] (i) at (-0.4,0) {};
   \node[st, align=left] (l) at (2,0) {\textbf{Locked}\\[-1pt]\scriptsize\ttfamily entry / engageBolt\\[-2pt]\scriptsize\ttfamily EnterCode / countFailure};
   \node[st, align=left] (u) at (9,0) {\textbf{Unlocked}\\[-1pt]\scriptsize\ttfamily entry / releaseBolt};
-  \node[st, align=left] (a) at (5.5,-3) {\textbf{Alarm}\\[-1pt]\scriptsize\ttfamily entry / sirenOn\\[-2pt]\scriptsize\ttfamily exit / sirenOff};
+  \node[st, align=left] (a) at (2,-3.6) {\textbf{Alarm}\\[-1pt]\scriptsize\ttfamily entry / sirenOn\\[-2pt]\scriptsize\ttfamily exit / sirenOff};
   \draw[tr] (i) -- (l);
   \draw[tr] (l.north east) to[bend left=12] node[lbl, above]{EnterCode [isValidCode] / resetAttempts} (u.north west);
   \draw[tr] (u.west) -- node[lbl, above]{Lock} (l.east);
   \draw[tr] (u.south west) to[bend left=12] node[lbl, below]{Timeout} (l.south east);
-  \draw[tr] (l.south) to[bend right=20] node[lbl, left]{EnterCode [tooManyAttempts]} (a.west);
-  \draw[tr] (a.north) to[bend right=10] node[lbl, right, pos=0.6]{Reset [isAdminCode] / resetAttempts} (l.south east);
+  \draw[tr] ([xshift=-6mm]l.south) to[bend right=25] node[lbl, left]{EnterCode [tooManyAttempts]} ([xshift=-6mm]a.north);
+  \draw[tr] ([xshift=6mm]a.north) to[bend right=25] node[lbl, right]{Reset [isAdminCode] / resetAttempts} ([xshift=6mm]l.south);
 \end{tikzpicture}
 \caption{Goal of Tutorial 3 (\code{examples/DoorLock.machina}).}
 \end{figure}
@@ -1070,6 +1070,7 @@ Drop a state inside another        & Makes it a substate of the state under its 
 Drag a state out of its parent     & Moves it to the enclosing level. \\
 Drag the corner handle             & Resizes the selected state. Siblings that end up fully inside it become its children; children whose centre ends up outside it leave it and are nested where they now lie. \\
 Drag a transition label            & Bends the transition; near the straight line it snaps back to straight. \\
+Drag a self loop or its label      & Moves the loop round its state and makes it larger or smaller; its tip follows the pointer. \\
 Double-click a state               & Selects it and focuses the \ui{Name} field. \\
 Drag empty canvas / middle button  & Pans the view. \\
 Mouse wheel                        & Zooms around the mouse pointer. \\
@@ -1097,7 +1098,8 @@ Arrow keys                         & Nudge the selection by 1 pixel (10 with \ui
   \item[Initial pseudostate] The region it belongs to and \ui{Color}.
   \item[History pseudostate] The composite state it belongs to, \ui{Deep history (H*)} and \ui{Color}.
   \item[Choice point] The region it belongs to and \ui{Color}.
-  \item[Transition] \ui{Event}, \ui{Guard}, \ui{Action}, \ui{Color} and \ui{Straighten}. The heading
+  \item[Transition] \ui{Event}, \ui{Guard}, \ui{Action}, \ui{Color} and \ui{Straighten} (\ui{Reset loop}
+    for a self transition, which returns a dragged loop to its default place). The heading
     tells the kind: \emph{Transition}, \emph{Timeout transition}, \emph{Completion transition},
     \emph{Internal transition} or \emph{Choice branch}. Self transitions additionally offer
     \ui{Internal (no exit / entry)}. Branches leaving a choice point have no event; their guard may be
@@ -1150,9 +1152,12 @@ to the diagram. For documents, export with a light theme.
 \section{Automatic layout}
 \label{sec:layout}
 \ui{Layout} in the toolbar, or \ui{MachinaState: Auto-Layout Diagram} in the Command Palette, arranges
-the diagram with the layered algorithm of the Eclipse Layout Kernel (ELK). Each container --- the top
-level, every composite state and every region --- is laid out on its own, innermost first, so that
-the hierarchy is preserved and containers grow to fit their contents. Simple states are resized to
+the diagram with the Eclipse Layout Kernel (ELK). Each container --- the top level, every composite
+state and every region --- is laid out on its own, innermost first, so that the hierarchy is preserved
+and containers grow to fit their contents. Each container is arranged three ways --- as a layered flow
+from left to right, as a layered flow from top to bottom, and organically, spread in both directions
+with the initial state towards the top left --- and the arrangement that fits a screen-shaped area most
+compactly is kept, so that a diagram does not turn into a long strip. Simple states are resized to
 fit their name and actions, and transition bends are reset. Imported diagrams are laid out this way
 automatically. The layout runs inside VS Code and does not need a network connection.
 
@@ -1302,6 +1307,9 @@ is an ordinary leaf; the transitions of its enclosing states remain active.
 \end{tikzpicture}
 \caption{Anatomy of a transition label.}
 \end{figure}
+\noindent On an arrow, the editor shows each part on a line of its own --- the event, then
+\code{[guard]}, then \code{/ actions} --- beside the arrow, on the outer side of a curve. Internal
+transitions, listed inside their state, keep the one-line form.
 \begin{itemize}[itemsep=1pt]
   \item \textbf{Event} --- one of:
         \begin{itemize}[itemsep=0pt]
