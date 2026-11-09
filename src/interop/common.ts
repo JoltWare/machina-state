@@ -240,6 +240,19 @@ export class DiagramBuilder {
     }
 }
 
+/**
+ * What an export to PlantUML, SCXML or Mermaid cannot carry over, as a sentence for the user, or undefined
+ * when the export is faithful. Those formats have UML semantics only: a diagram with Stateflow semantics
+ * loses its outer-first dispatch, its during actions and its step-counted after(...).
+ */
+export function exportLimitations(d: Diagram): string | undefined {
+    if (d.semantics !== 'stateflow') {
+        return undefined;
+    }
+    const during = d.states.filter(s => (s.during ?? '').trim()).length;
+    return `the diagram uses Stateflow semantics, which the export cannot express: it describes UML behaviour (innermost state first, after(...) as timers)${during ? ` and leaves out the during actions of ${during} state(s)` : ''}`;
+}
+
 /** The interchange formats MachinaState imports and exports. */
 export type InterchangeFormat = 'plantuml' | 'scxml' | 'mermaid';
 

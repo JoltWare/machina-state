@@ -869,3 +869,76 @@ uiWith('invalid JSON shows an error instead of the diagram', '{ "states": [', as
     assert.equal(await e.page.locator('#parse-error').isVisible(), true);
     assert.match(await e.page.locator('#parse-error').textContent(), /not valid JSON/);
 });
+
+// --------------------------------------------------------------- Stateflow semantics
+
+const stateflowLab = fs.readFileSync(path.join(root, 'test', 'diagrams', 'StateflowLab.machina'), 'utf8');
+
+uiWith('a Stateflow diagram shows its semantics, step settings and during actions', stateflowLab, async e => {
+    assert.equal(await e.page.locator('#panel select').first().inputValue(), 'stateflow');
+    assert.equal(await e.field('Step event').inputValue(), 'Step');
+    assert.equal(await e.field('Step period \\(ms\\)').inputValue(), '10');
+    // Event parameter fields for the other events, but none for the step event.
+    assert.equal(await e.field('Go').count(), 1);
+    assert.equal(await e.field('Step').count(), 0);
+    assert.ok((await e.page.locator('#canvas text').allTextContents()).includes('during / idleTick'));
+    await e.click(await e.centerOf('Idle'));
+    assert.equal(await e.field('During actions').inputValue(), 'idleTick');
+    await e.field('During actions').fill('idleTick; sample');
+    await e.field('During actions').press('Enter');
+    assert.equal((await e.edited()).states.find(s => s.id === 'Idle').during, 'idleTick; sample');
+});
+
+uiWith('switching a diagram to Stateflow semantics and back', example('TrafficLight'), async e => {
+    // A UML diagram has no During field.
+    await e.click(await e.centerOf((await e.page.locator('g.node').nth(1).getAttribute('data-id'))));
+    assert.equal(await e.field('During actions').count(), 0);
+    await e.click(e.at(-30, -30));
+    await e.page.locator('#panel select').first().selectOption('stateflow');
+    let d = await e.edited();
+    assert.equal(d.semantics, 'stateflow');
+    assert.equal(d.formatVersion, 2);
+    assert.deepEqual(d.step, { event: 'Step' });
+    await e.page.locator('#panel select').first().selectOption('uml');
+    d = await e.edited();
+    assert.equal(d.semantics, undefined);
+    assert.equal(d.step, undefined);
+    assert.equal(d.formatVersion, undefined);
+});
+
+uiWith(
+    'the code behind imported hooks is shown with the state',
+    JSON.stringify({
+        name: 'M',
+        semantics: 'stateflow',
+        step: { event: 'Step' },
+        states: [
+            { id: 'i', name: '', kind: 'initial', parent: null, x: 0, y: 40, w: 24, h: 24 },
+            { id: 'A', name: 'A', kind: 'state', parent: null, x: 80, y: 20, w: 140, h: 70, entry: 'AEntry', exit: '' }
+        ],
+        transitions: [{ id: 't0', source: 'i', target: 'A' }],
+        hooks: { AEntry: { code: 'count = 0;', origin: 'state A entry' } }
+    }),
+    async e => {
+        await e.click(await e.centerOf('A'));
+        assert.equal(await e.page.locator('#panel .hook-code pre').textContent(), 'count = 0;');
+        assert.match(await e.page.locator('#panel .hook-code span').textContent(), /AEntry \(state A entry\)/);
+    }
+);
+
+uiWith('a diagram with a newer format version is not opened for editing', JSON.stringify({ formatVersion: 99, name: 'M', states: [], transitions: [] }), async e => {
+    assert.equal(await e.page.locator('#parse-error').isVisible(), true);
+    assert.match(await e.page.locator('#parse-error').textContent(), /format version 99/);
+});
+
+uiWith('the simulator counts steps for after() under Stateflow semantics', stateflowLab, async e => {
+    await e.page.click('#btn-sim');
+    assert.match(await e.active(), /Idle/);
+    // Idle -> Active after(30ms) at 10 ms per step: the third step fires it.
+    await e.panelButton('Step').click();
+    await e.panelButton('Step').click();
+    assert.match(await e.active(), /Idle/);
+    await e.panelButton('Step').click();
+    assert.match(await e.active(), /Fill/);
+    assert.ok((await e.log()).some(l => /idleTick/.test(l)), 'the during action of Idle ran');
+});

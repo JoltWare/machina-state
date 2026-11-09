@@ -1,0 +1,446 @@
+{
+  "formatVersion": 2,
+  "semantics": "stateflow",
+  "step": {
+    "event": "Step",
+    "periodMs": 10
+  },
+  "name": "Gear_Logic",
+  "namespace": "",
+  "states": [
+    {
+      "id": "Chart",
+      "name": "Chart",
+      "kind": "state",
+      "parent": null,
+      "x": 146,
+      "y": 52,
+      "w": 1427,
+      "h": 619,
+      "entry": "",
+      "exit": ""
+    },
+    {
+      "id": "initial_Initial",
+      "name": "Initial",
+      "kind": "initial",
+      "parent": null,
+      "x": 52,
+      "y": 350,
+      "w": 24,
+      "h": 24
+    },
+    {
+      "id": "region_gear_state",
+      "name": "gear_state",
+      "kind": "region",
+      "parent": "Chart",
+      "x": 166,
+      "y": 97,
+      "w": 1387,
+      "h": 211
+    },
+    {
+      "id": "gear_state",
+      "name": "gear_state",
+      "kind": "state",
+      "parent": "region_gear_state",
+      "x": 287,
+      "y": 135,
+      "w": 1239,
+      "h": 149,
+      "entry": "",
+      "exit": "",
+      "during": "gear_stateDuring"
+    },
+    {
+      "id": "initial_Initial_1",
+      "name": "Initial",
+      "kind": "initial",
+      "parent": "region_gear_state",
+      "x": 193,
+      "y": 198,
+      "w": 24,
+      "h": 24
+    },
+    {
+      "id": "first",
+      "name": "first",
+      "kind": "state",
+      "parent": "gear_state",
+      "x": 413,
+      "y": 192,
+      "w": 140,
+      "h": 60,
+      "entry": "firstEntry",
+      "exit": ""
+    },
+    {
+      "id": "second",
+      "name": "second",
+      "kind": "state",
+      "parent": "gear_state",
+      "x": 720,
+      "y": 192,
+      "w": 150,
+      "h": 60,
+      "entry": "secondEntry",
+      "exit": ""
+    },
+    {
+      "id": "third",
+      "name": "third",
+      "kind": "state",
+      "parent": "gear_state",
+      "x": 1037,
+      "y": 192,
+      "w": 140,
+      "h": 60,
+      "entry": "thirdEntry",
+      "exit": ""
+    },
+    {
+      "id": "fourth",
+      "name": "fourth",
+      "kind": "state",
+      "parent": "gear_state",
+      "x": 1344,
+      "y": 192,
+      "w": 150,
+      "h": 60,
+      "entry": "fourthEntry",
+      "exit": ""
+    },
+    {
+      "id": "region_selection_state",
+      "name": "selection_state",
+      "kind": "region",
+      "parent": "Chart",
+      "x": 166,
+      "y": 320,
+      "w": 1387,
+      "h": 331
+    },
+    {
+      "id": "selection_state",
+      "name": "selection_state",
+      "kind": "state",
+      "parent": "region_selection_state",
+      "x": 287,
+      "y": 358,
+      "w": 776,
+      "h": 269,
+      "entry": "",
+      "exit": "",
+      "during": "computeThresholds"
+    },
+    {
+      "id": "initial_Initial_2",
+      "name": "Initial",
+      "kind": "initial",
+      "parent": "region_selection_state",
+      "x": 193,
+      "y": 481,
+      "w": 24,
+      "h": 24
+    },
+    {
+      "id": "steady_state",
+      "name": "steady_state",
+      "kind": "state",
+      "parent": "selection_state",
+      "x": 413,
+      "y": 524,
+      "w": 130,
+      "h": 60,
+      "entry": "",
+      "exit": ""
+    },
+    {
+      "id": "downshifting",
+      "name": "downshifting",
+      "kind": "state",
+      "parent": "selection_state",
+      "x": 901,
+      "y": 515,
+      "w": 130,
+      "h": 60,
+      "entry": "",
+      "exit": ""
+    },
+    {
+      "id": "upshifting",
+      "name": "upshifting",
+      "kind": "state",
+      "parent": "selection_state",
+      "x": 901,
+      "y": 415,
+      "w": 120,
+      "h": 60,
+      "entry": "",
+      "exit": ""
+    },
+    {
+      "id": "initial_Initial_3",
+      "name": "Initial",
+      "kind": "initial",
+      "parent": "gear_state",
+      "x": 319,
+      "y": 210,
+      "w": 24,
+      "h": 24
+    },
+    {
+      "id": "initial_Initial_4",
+      "name": "Initial",
+      "kind": "initial",
+      "parent": "selection_state",
+      "x": 319,
+      "y": 542,
+      "w": 24,
+      "h": 24
+    }
+  ],
+  "transitions": [
+    {
+      "id": "t0",
+      "source": "initial_Initial",
+      "target": "Chart",
+      "event": "",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "t1",
+      "source": "initial_Initial_1",
+      "target": "gear_state",
+      "event": "",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "t2",
+      "source": "initial_Initial_2",
+      "target": "selection_state",
+      "event": "",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "t3",
+      "source": "initial_Initial_3",
+      "target": "first",
+      "event": "",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "t4",
+      "source": "first",
+      "target": "second",
+      "event": "UP",
+      "guard": "",
+      "action": "",
+      "bend": -14
+    },
+    {
+      "id": "t5",
+      "source": "second",
+      "target": "third",
+      "event": "UP",
+      "guard": "",
+      "action": "",
+      "bend": -14
+    },
+    {
+      "id": "t6",
+      "source": "third",
+      "target": "fourth",
+      "event": "UP",
+      "guard": "",
+      "action": "",
+      "bend": -14
+    },
+    {
+      "id": "t7",
+      "source": "fourth",
+      "target": "third",
+      "event": "DOWN",
+      "guard": "",
+      "action": "",
+      "bend": -14
+    },
+    {
+      "id": "t8",
+      "source": "initial_Initial_4",
+      "target": "steady_state",
+      "event": "",
+      "guard": "",
+      "action": ""
+    },
+    {
+      "id": "t9",
+      "source": "steady_state",
+      "target": "upshifting",
+      "event": "Step",
+      "guard": "guard28",
+      "action": "",
+      "bend": -158
+    },
+    {
+      "id": "t10",
+      "source": "downshifting",
+      "target": "steady_state",
+      "event": "Step",
+      "guard": "guard24",
+      "action": ""
+    },
+    {
+      "id": "t11",
+      "source": "upshifting",
+      "target": "steady_state",
+      "event": "Step",
+      "guard": "guard26",
+      "action": "",
+      "bend": 104
+    },
+    {
+      "id": "t12",
+      "source": "second",
+      "target": "first",
+      "event": "DOWN",
+      "guard": "",
+      "action": "",
+      "bend": -14
+    },
+    {
+      "id": "t13",
+      "source": "third",
+      "target": "second",
+      "event": "DOWN",
+      "guard": "",
+      "action": "",
+      "bend": -14
+    },
+    {
+      "id": "t14",
+      "source": "steady_state",
+      "target": "downshifting",
+      "event": "Step",
+      "guard": "guard21",
+      "action": "",
+      "bend": -55
+    },
+    {
+      "id": "t15",
+      "source": "downshifting",
+      "target": "steady_state",
+      "event": "after(100ms)",
+      "guard": "guard25",
+      "action": "action25",
+      "bend": -40
+    },
+    {
+      "id": "t16",
+      "source": "upshifting",
+      "target": "steady_state",
+      "event": "after(100ms)",
+      "guard": "guard27",
+      "action": "action27",
+      "bend": 28
+    }
+  ],
+  "events": {
+    "UP": "",
+    "DOWN": "",
+    "SlowDown": "",
+    "Cruise": "",
+    "SpeedUp": ""
+  },
+  "codegen": {
+    "queue": true,
+    "language": "cpp",
+    "style": "switch"
+  },
+  "hooks": {
+    "gear_stateDuring": {
+      "code": "speed = max(0,min(speed+delta,100));",
+      "origin": "state gear_state during"
+    },
+    "firstEntry": {
+      "code": "gear=1;",
+      "origin": "state first entry"
+    },
+    "secondEntry": {
+      "code": "gear=2;",
+      "origin": "state second entry"
+    },
+    "thirdEntry": {
+      "code": "gear=3;",
+      "origin": "state third entry"
+    },
+    "fourthEntry": {
+      "code": "gear=4;",
+      "origin": "state fourth entry"
+    },
+    "guard28": {
+      "code": "speed > up_th",
+      "origin": "transition 28"
+    },
+    "guard24": {
+      "code": "speed > down_th",
+      "origin": "transition 24"
+    },
+    "guard26": {
+      "code": "speed < up_th",
+      "origin": "transition 26"
+    },
+    "guard21": {
+      "code": "speed < down_th",
+      "origin": "transition 21"
+    },
+    "action25": {
+      "code": "send(DOWN, gear_state);",
+      "origin": "transition 25"
+    },
+    "guard25": {
+      "code": "speed <= down_th",
+      "origin": "transition 25"
+    },
+    "action27": {
+      "code": "send(UP,gear_state);",
+      "origin": "transition 27"
+    },
+    "guard27": {
+      "code": "speed >= up_th",
+      "origin": "transition 27"
+    }
+  },
+  "data": [
+    {
+      "name": "down_th",
+      "scope": "local",
+      "type": "Inherit: From definition in chart"
+    },
+    {
+      "name": "up_th",
+      "scope": "local",
+      "type": "Inherit: From definition in chart"
+    },
+    {
+      "name": "delta",
+      "scope": "local",
+      "type": "Inherit: From definition in chart"
+    },
+    {
+      "name": "speed",
+      "scope": "local",
+      "type": "Inherit: From definition in chart"
+    },
+    {
+      "name": "gear",
+      "scope": "local",
+      "type": "Inherit: From definition in chart"
+    }
+  ]
+}

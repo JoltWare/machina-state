@@ -1,0 +1,635 @@
+{
+    "formatVersion": 2,
+    "semantics": "stateflow",
+    "step": {
+        "event": "Step",
+        "periodMs": 10
+    },
+    "name": "StateflowLab",
+    "namespace": "Lab",
+    "states": [
+        {
+            "id": "i0",
+            "name": "",
+            "kind": "initial",
+            "parent": null,
+            "x": 52,
+            "y": 134,
+            "w": 24,
+            "h": 24
+        },
+        {
+            "id": "Idle",
+            "name": "Idle",
+            "kind": "state",
+            "parent": null,
+            "x": 146,
+            "y": 116,
+            "w": 120,
+            "h": 60,
+            "entry": "",
+            "exit": "",
+            "during": "idleTick"
+        },
+        {
+            "id": "Active",
+            "name": "Active",
+            "kind": "state",
+            "parent": null,
+            "x": 595,
+            "y": 52,
+            "w": 1093,
+            "h": 248,
+            "entry": "activeOn",
+            "exit": "activeOff",
+            "during": "activeDuring"
+        },
+        {
+            "id": "i1",
+            "name": "",
+            "kind": "initial",
+            "parent": "Active",
+            "x": 627,
+            "y": 163,
+            "w": 24,
+            "h": 24
+        },
+        {
+            "id": "Fill",
+            "name": "Fill",
+            "kind": "state",
+            "parent": "Active",
+            "x": 721,
+            "y": 145,
+            "w": 120,
+            "h": 60,
+            "entry": "",
+            "exit": "",
+            "during": "filling"
+        },
+        {
+            "id": "Hold",
+            "name": "Hold",
+            "kind": "state",
+            "parent": "Active",
+            "x": 1426,
+            "y": 142,
+            "w": 230,
+            "h": 85,
+            "entry": "holdOn",
+            "exit": ""
+        },
+        {
+            "id": "c1",
+            "name": "",
+            "kind": "choice",
+            "parent": "Active",
+            "x": 1113,
+            "y": 148,
+            "w": 30,
+            "h": 30
+        },
+        {
+            "id": "Parallel",
+            "name": "Parallel",
+            "kind": "state",
+            "parent": null,
+            "x": 595,
+            "y": 340,
+            "w": 707,
+            "h": 321,
+            "entry": "",
+            "exit": "",
+            "during": "parTick"
+        },
+        {
+            "id": "R1",
+            "name": "Left",
+            "kind": "region",
+            "parent": "Parallel",
+            "x": 615,
+            "y": 385,
+            "w": 667,
+            "h": 122
+        },
+        {
+            "id": "R2",
+            "name": "Right",
+            "kind": "region",
+            "parent": "Parallel",
+            "x": 615,
+            "y": 519,
+            "w": 667,
+            "h": 122
+        },
+        {
+            "id": "i2",
+            "name": "",
+            "kind": "initial",
+            "parent": "R1",
+            "x": 642,
+            "y": 441,
+            "w": 24,
+            "h": 24
+        },
+        {
+            "id": "A1",
+            "name": "A1",
+            "kind": "state",
+            "parent": "R1",
+            "x": 736,
+            "y": 423,
+            "w": 120,
+            "h": 60,
+            "entry": "",
+            "exit": "",
+            "during": "a1Tick"
+        },
+        {
+            "id": "A2",
+            "name": "A2",
+            "kind": "state",
+            "parent": "R1",
+            "x": 1135,
+            "y": 423,
+            "w": 120,
+            "h": 60,
+            "entry": "",
+            "exit": ""
+        },
+        {
+            "id": "i3",
+            "name": "",
+            "kind": "initial",
+            "parent": "R2",
+            "x": 642,
+            "y": 575,
+            "w": 24,
+            "h": 24
+        },
+        {
+            "id": "B1",
+            "name": "B1",
+            "kind": "state",
+            "parent": "R2",
+            "x": 736,
+            "y": 557,
+            "w": 120,
+            "h": 60,
+            "entry": "",
+            "exit": "",
+            "during": "b1Tick"
+        },
+        {
+            "id": "B2",
+            "name": "B2",
+            "kind": "state",
+            "parent": "R2",
+            "x": 1135,
+            "y": 557,
+            "w": 120,
+            "h": 60,
+            "entry": "",
+            "exit": ""
+        },
+        {
+            "id": "Probe",
+            "name": "Probe",
+            "kind": "state",
+            "parent": null,
+            "x": 1758,
+            "y": 641,
+            "w": 120,
+            "h": 60,
+            "entry": "",
+            "exit": ""
+        },
+        {
+            "id": "c2",
+            "name": "",
+            "kind": "choice",
+            "parent": null,
+            "x": 1948,
+            "y": 656,
+            "w": 30,
+            "h": 30
+        }
+    ],
+    "transitions": [
+        {
+            "id": "t0",
+            "source": "i0",
+            "target": "Idle",
+            "event": "",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "t1",
+            "source": "Idle",
+            "target": "Active",
+            "event": "Go",
+            "guard": "",
+            "action": "",
+            "bend": -43
+        },
+        {
+            "id": "t2",
+            "source": "Idle",
+            "target": "Active",
+            "event": "after(30ms)",
+            "guard": "ready",
+            "action": ""
+        },
+        {
+            "id": "t3",
+            "source": "Idle",
+            "target": "Parallel",
+            "event": "Split",
+            "guard": "",
+            "action": "",
+            "bend": -35
+        },
+        {
+            "id": "t4",
+            "source": "Idle",
+            "target": "Probe",
+            "event": "Check",
+            "guard": "",
+            "action": "",
+            "bend": 250
+        },
+        {
+            "id": "t5",
+            "source": "Active",
+            "target": "Idle",
+            "event": "after(6 steps)",
+            "guard": "abort",
+            "action": "",
+            "bend": -37
+        },
+        {
+            "id": "t6",
+            "source": "Active",
+            "target": "Idle",
+            "event": "Stop",
+            "guard": "",
+            "action": "",
+            "bend": -77
+        },
+        {
+            "id": "t7",
+            "source": "i1",
+            "target": "Fill",
+            "event": "",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "t8",
+            "source": "Fill",
+            "target": "c1",
+            "event": "after(2 steps)",
+            "guard": "",
+            "action": "",
+            "bend": -17
+        },
+        {
+            "id": "t9",
+            "source": "Fill",
+            "target": "Hold",
+            "event": "Step",
+            "guard": "full",
+            "action": "",
+            "bend": 94
+        },
+        {
+            "id": "t10",
+            "source": "c1",
+            "target": "Hold",
+            "event": "",
+            "guard": "overflow",
+            "action": "",
+            "bend": -13
+        },
+        {
+            "id": "t11",
+            "source": "c1",
+            "target": "Fill",
+            "event": "",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "t12",
+            "source": "Hold",
+            "target": "Fill",
+            "event": "after(20ms)",
+            "guard": "",
+            "action": "holdDone",
+            "bend": -112
+        },
+        {
+            "id": "t13",
+            "source": "Hold",
+            "target": "Hold",
+            "event": "Step",
+            "guard": "blink",
+            "action": "toggle",
+            "internal": true
+        },
+        {
+            "id": "t14",
+            "source": "Hold",
+            "target": "Hold",
+            "event": "after(1 steps)",
+            "guard": "blink",
+            "action": "toggle",
+            "internal": true
+        },
+        {
+            "id": "t15",
+            "source": "Parallel",
+            "target": "Idle",
+            "event": "after(4 steps)",
+            "guard": "parExit",
+            "action": "",
+            "bend": -250
+        },
+        {
+            "id": "t16",
+            "source": "Parallel",
+            "target": "Idle",
+            "event": "Stop",
+            "guard": "",
+            "action": "",
+            "bend": -250
+        },
+        {
+            "id": "t17",
+            "source": "i2",
+            "target": "A1",
+            "event": "",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "t18",
+            "source": "A1",
+            "target": "A2",
+            "event": "after(3 steps)",
+            "guard": "a1Go",
+            "action": ""
+        },
+        {
+            "id": "t19",
+            "source": "A2",
+            "target": "Idle",
+            "event": "Step",
+            "guard": "escape",
+            "action": "",
+            "bend": -250
+        },
+        {
+            "id": "t20",
+            "source": "i3",
+            "target": "B1",
+            "event": "",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "t21",
+            "source": "B1",
+            "target": "B2",
+            "event": "after(2 steps)",
+            "guard": "b1Go",
+            "action": "",
+            "bend": -15
+        },
+        {
+            "id": "t22",
+            "source": "B2",
+            "target": "B1",
+            "event": "after(3 steps)",
+            "guard": "",
+            "action": "",
+            "bend": -15
+        },
+        {
+            "id": "t23",
+            "source": "Probe",
+            "target": "c2",
+            "event": "",
+            "guard": "",
+            "action": ""
+        },
+        {
+            "id": "t24",
+            "source": "c2",
+            "target": "Active",
+            "event": "",
+            "guard": "probeOk",
+            "action": "",
+            "bend": 250
+        },
+        {
+            "id": "t25",
+            "source": "c2",
+            "target": "Idle",
+            "event": "",
+            "guard": "",
+            "action": "",
+            "bend": -250
+        }
+    ],
+    "events": {},
+    "codegen": {
+        "language": "cpp",
+        "style": "switch"
+    },
+    "scenarios": [
+        {
+            "name": "Coverage",
+            "steps": [
+                {
+                    "event": "Split"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Stop"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Go"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Stop"
+                },
+                {
+                    "event": "Go"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Stop"
+                },
+                {
+                    "event": "Check"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Split"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                },
+                {
+                    "event": "Step"
+                }
+            ]
+        }
+    ]
+}

@@ -23,7 +23,8 @@
 //          machinaState.exportScxml     – write a .scxml file (interop/scxml.ts)
 //          machinaState.exportMermaid   – write a .mmd file, or a .md file with a ```mermaid block (interop/mermaid.ts)
 //          machinaState.copyMermaid     – put the diagram on the clipboard as a ```mermaid Markdown block
-//          machinaState.import          – convert a PlantUML/SCXML/Mermaid file into a new, auto-laid-out .machina
+//          machinaState.import          – convert a PlantUML/SCXML/Mermaid file or a Stateflow model (.slx,
+//                                         stateflowImport.ts) into a new, auto-laid-out .machina
 //          machinaState.openManual      – open the user manual for this version in the browser (hostUtil.ts)
 //          machinaState.getStarted      – open the Get Started walkthrough ("contributes.walkthroughs")
 //
@@ -39,11 +40,12 @@ import { generateForDocument } from './codegen';
 import { registerDiagnostics } from './diagnostics';
 import { MachinaEditorProvider, layoutDocument } from './editorProvider';
 import { importCodegen, manualUrl } from './hostUtil';
-import { detectFormat } from './interop/common';
+import { detectFormat, exportLimitations } from './interop/common';
 import { exportMermaid, importMermaid, mermaidMarkdown } from './interop/mermaid';
 import { exportPlantUml, importPlantUml } from './interop/plantuml';
 import { exportScxml, importScxml } from './interop/scxml';
 import { autoLayout } from './layout';
+import { importSlx } from './stateflowImport';
 import { Diagram, parseDiagram } from './model';
 
 /**
@@ -128,6 +130,10 @@ export function activate(context: vscode.ExtensionContext): void {
             if (opened) {
                 await vscode.env.clipboard.writeText(mermaidMarkdown(exportMermaid(opened.diagram)));
                 vscode.window.setStatusBarMessage('MachinaState: copied the diagram as a Mermaid Markdown block', 5000);
+                const limits = exportLimitations(opened.diagram);
+                if (limits) {
+                    vscode.window.showWarningMessage(`MachinaState: copied, but ${limits}.`);
+                }
             }
         }),
         vscode.commands.registerCommand('machinaState.import', importDiagram),
@@ -208,10 +214,15 @@ async function exportDiagram(provider: MachinaEditorProvider, uri: vscode.Uri | 
     }
     await vscode.workspace.fs.writeFile(target, Buffer.from(text, 'utf8'));
     await vscode.window.showTextDocument(target, { viewColumn: vscode.ViewColumn.Beside, preview: false });
+    const limits = exportLimitations(diagram);
+    if (limits) {
+        vscode.window.showWarningMessage(`MachinaState: exported, but ${limits}.`);
+    }
 }
 
 /**
- * Imports a PlantUML, SCXML or Mermaid state machine as a new .machina diagram.
+ * Imports a PlantUML, SCXML or Mermaid state machine, or a Stateflow chart from a Simulink model (.slx), as a
+ * new .machina diagram.
  *
  * Steps: pick the source file (unless one was given by the explorer context menu), parse it with the
  * matching importer (chosen by `detectFormat`; a Markdown file is read as Mermaid, from its first ```mermaid
@@ -228,10 +239,11 @@ async function importDiagram(uri?: vscode.Uri): Promise<void> {
         const picked = await vscode.window.showOpenDialog({
             canSelectMany: false,
             filters: {
-                'State machines': ['puml', 'plantuml', 'pu', 'wsd', 'scxml', 'xml', 'mmd', 'mermaid', 'md'],
+                'State machines': ['puml', 'plantuml', 'pu', 'wsd', 'scxml', 'xml', 'mmd', 'mermaid', 'md', 'slx'],
                 PlantUML: ['puml', 'plantuml', 'pu', 'wsd'],
                 SCXML: ['scxml', 'xml'],
-                'Mermaid or Markdown': ['mmd', 'mermaid', 'md']
+                'Mermaid or Markdown': ['mmd', 'mermaid', 'md'],
+                'Simulink model with Stateflow chart': ['slx']
             },
             openLabel: 'Import'
         });
@@ -240,11 +252,19 @@ async function importDiagram(uri?: vscode.Uri): Promise<void> {
     if (!uri) {
         return;
     }
-    const text = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
     let result;
     try {
-        const format = detectFormat(uri.path, text);
-        result = format === 'scxml' ? importScxml(text) : format === 'mermaid' ? importMermaid(text) : importPlantUml(text);
+        if (/\.slx$/i.test(uri.path)) {
+            // A binary package; the user may still cancel the chart or step period choice.
+            result = await importSlx(uri);
+            if (!result) {
+                return;
+            }
+        } else {
+            const text = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+            const format = detectFormat(uri.path, text);
+            result = format === 'scxml' ? importScxml(text) : format === 'mermaid' ? importMermaid(text) : importPlantUml(text);
+        }
     } catch (err) {
         vscode.window.showErrorMessage(`MachinaState: cannot import ${vscode.workspace.asRelativePath(uri)}: ${(err as Error).message}`);
         return;

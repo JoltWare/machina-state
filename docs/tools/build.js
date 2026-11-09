@@ -9,6 +9,7 @@ const path = require('path');
 const root = path.resolve(__dirname, '..', '..');
 const { analyze } = require(path.join(root, 'out', 'model.js'));
 const { generateCode } = require(path.join(root, 'out', 'generators', 'index.js'));
+const { generateHookStub } = require(path.join(root, 'out', 'generators', 'stub.js'));
 
 const S = (id, name, kind, parent, x, y, w, h, extra = {}) => ({ id, name, kind, parent, x, y, w, h, ...extra });
 const state = (id, parent, x, y, w, h, entry = '', exit = '', extra = {}) => S(id, id, 'state', parent, x, y, w, h, { entry, exit, ...extra });
@@ -126,6 +127,8 @@ colored.transitions.find(t => t.id === 't9').color = '#56b6c2';
 const mediaPlayer = JSON.parse(fs.readFileSync(path.join(root, 'examples', 'MediaPlayer.machina'), 'utf8'));
 const vending = JSON.parse(fs.readFileSync(path.join(root, 'examples', 'VendingMachine.machina'), 'utf8'));
 const washer = JSON.parse(fs.readFileSync(path.join(root, 'examples', 'Washer.machina'), 'utf8'));
+// The Stateflow import example (examples/stateflow/README.md): the imported gear shift chart.
+const gearLogic = JSON.parse(fs.readFileSync(path.join(root, 'examples', 'stateflow', 'Gear_Logic.machina'), 'utf8'));
 
 // ---------------------------------------------------------------- output
 
@@ -162,7 +165,9 @@ const shots = {
     't5-overview': { diagram: washer },
     't5-region': { diagram: washer, select: 'rHeater' },
     't5-sim': { diagram: washer, sim: ['Start', 'TempReached', 'after 30 s'] },
-    't5-scenario': { diagram: washer, sim: ['Run'], coverage: true }
+    't5-scenario': { diagram: washer, sim: ['Run'], coverage: true },
+    // The upshift transition after(100ms) [guard27] / action27, whose imported code the panel shows.
+    'sf-gear': { diagram: gearLogic, select: 't16' }
 };
 for (const [name, shot] of Object.entries(shots)) {
     const { issues } = analyze(JSON.parse(text(shot.diagram)));
@@ -188,6 +193,8 @@ emit(t1, 'TrafficLightFlat_table.cs', 'csharp', 'table', { trace: false, threadS
 emit(t2, 'TrafficLight.hpp', 'cpp', 'table');
 emit(t3, 'DoorLock.cs', 'csharp', 'table');
 emit(vending, 'VendingMachine.hpp', 'cpp', 'switch', { trace: true, threadSafe: false, queue: true });
+// The hook stub of the Stateflow import example, as Generate Code writes it next to Gear_Logic.hpp.
+fs.writeFileSync(path.join(genDir, 'Gear_LogicHooks.hpp'), generateHookStub(analyze(JSON.parse(text(gearLogic))).machine, gearLogic, 'cpp').code);
 
 // The C target writes a header and a source file, used by docs/examples/traffic_flat.c.
 {
@@ -247,4 +254,13 @@ snippet('doorlock-table.cs', 'DoorLock.cs', /protected DoorLock\(\)/);
 snippet('doorlock-dispatch.cs', 'DoorLock.cs', /public bool DispatchEnterCode\(/, { blocks: 2 });
 snippet('doorlock-hooks.cs', 'DoorLock.cs', /<summary>Acquires mutual exclusion/, { end: /abstract void countFailure/ });
 snippet('vending-timers.hpp', 'VendingMachine.hpp', /bool DispatchTimeout\(/);
+// The Stateflow example's hook stub: its variables, a during action and an action that raises an event.
+snippet('gear-variables.hpp', 'Gear_LogicHooks.hpp', /Variables used by the hook code/, { end: /double gear\{\}/ });
+snippet('gear-during.hpp', 'Gear_LogicHooks.hpp', /void gear_stateDuring\(/);
+snippet('gear-action.hpp', 'Gear_LogicHooks.hpp', /void action27\(/);
+fs.writeFileSync(
+    path.join(snippetDir, 'gear-hooks.hpp'),
+    ['gear-variables.hpp', 'gear-during.hpp', 'gear-action.hpp'].map(f => fs.readFileSync(path.join(snippetDir, f), 'utf8')).join('\n')
+);
+['gear-variables.hpp', 'gear-during.hpp', 'gear-action.hpp'].forEach(f => fs.rmSync(path.join(snippetDir, f)));
 console.log(`wrote ${Object.keys(shots).length} screenshot scenarios and generated code`);

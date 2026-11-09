@@ -564,6 +564,9 @@
         if ((s.exit || '').trim()) {
             lines.push({ text: 'exit / ' + s.exit.trim() });
         }
+        if ((s.during || '').trim()) {
+            lines.push({ text: 'during / ' + s.during.trim() });
+        }
         for (const t of diagram.transitions) {
             if (t.source === s.id && isInternal(t)) {
                 lines.push({ text: transitionLabel(t) || '(internal)', transition: t });
@@ -750,6 +753,64 @@
         return el('label', { class: 'check field-check', title: title || '' }, input, label);
     }
 
+    /** True if the diagram uses Stateflow semantics (outer-first dispatch, during actions, step counting). */
+    const isStateflow = () => diagram.semantics === 'stateflow';
+
+    /**
+     * The read-only code behind the hooks named in `texts` (action lists or guards such as `!ready`), from
+     * diagram.hooks (e.g. imported from Stateflow), as one block per hook that has code; '' when none has.
+     */
+    function hookCode(...texts) {
+        const hooks = diagram.hooks && typeof diagram.hooks === 'object' ? diagram.hooks : {};
+        const names = texts.flatMap(t => String(t || '').split(/[;,\n]/)).map(n => n.trim().replace(/^!\s*/, '').replace(/\(\s*\)$/, ''));
+        const blocks = [...new Set(names)]
+            .filter(n => n && hooks[n] && typeof hooks[n].code === 'string')
+            .map(n => el('div', { class: 'hook-code' }, el('span', { class: 'muted' }, `${n}${hooks[n].origin ? ` (${hooks[n].origin})` : ''}`), el('pre', {}, hooks[n].code)));
+        return blocks.length ? el('div', {}, el('h4', {}, 'Hook code'), ...blocks) : '';
+    }
+
+    /**
+     * Execution semantics selector and, for Stateflow semantics, the step event and period. Switching to
+     * Stateflow marks the file as format version 2 (see FORMAT_VERSION in model.ts); switching back removes the
+     * Stateflow settings again.
+     */
+    function semanticsFields() {
+        const select = el('select', {}, el('option', { value: 'uml' }, 'UML (innermost state first, timers)'), el('option', { value: 'stateflow' }, 'Stateflow (outer state first, step counting)'));
+        select.value = isStateflow() ? 'stateflow' : 'uml';
+        select.addEventListener('change', () => {
+            if (select.value === 'stateflow') {
+                diagram.semantics = 'stateflow';
+                diagram.formatVersion = Math.max(2, diagram.formatVersion || 0);
+                diagram.step = diagram.step && typeof diagram.step === 'object' ? diagram.step : { event: 'Step' };
+            } else {
+                delete diagram.semantics;
+                delete diagram.step;
+                if (diagram.formatVersion === 2) {
+                    delete diagram.formatVersion;
+                }
+            }
+            commit();
+            render();
+            renderPanel();
+        });
+        const result = [el('label', { class: 'field' }, el('span', {}, 'Semantics'), select)];
+        if (isStateflow()) {
+            const step = diagram.step && typeof diagram.step === 'object' ? diagram.step : (diagram.step = {});
+            result.push(
+                field('Step event', step.event, v => (step.event = v || 'Step'), { placeholder: 'Step' }),
+                field('Step period (ms)', step.periodMs === undefined ? '' : String(step.periodMs), v => {
+                    if (v && Number(v) > 0) {
+                        step.periodMs = Number(v);
+                    } else {
+                        delete step.periodMs;
+                    }
+                }, { placeholder: 'needed for after(500ms); after(n steps) works without' }),
+                el('p', { class: 'muted' }, 'Dispatch the step event once per period. An event is offered to the outermost active state first; if none of its transitions fires, it runs its during actions and passes the event on to its substates. after(...) counts step events.')
+            );
+        }
+        return result;
+    }
+
     /**
      * Rebuilds the side panel for the current context: the simulator panel while simulating; group tools for
      * a multi-selection; the state machine properties (class name, namespace, event parameter lists) and help
@@ -772,11 +833,14 @@
         }
         const sel = selection && (selection.type === 'state' ? byId(selection.id) : transitionById(selection.id));
         if (!sel) {
-            const events = usedEvents();
+            // The Stateflow step event cannot have parameters, so it gets no field.
+            const stepEvent = isStateflow() ? (diagram.step && diagram.step.event) || 'Step' : null;
+            const events = usedEvents().filter(ev => ev !== stepEvent);
             panel.append(
                 el('h3', {}, 'State machine'),
                 field('Class name', diagram.name, v => (diagram.name = v)),
-                field('Namespace', diagram.namespace, v => (diagram.namespace = v), { placeholder: 'optional, e.g. App.Control' })
+                field('Namespace', diagram.namespace, v => (diagram.namespace = v), { placeholder: 'optional, e.g. App.Control' }),
+                ...semanticsFields()
             );
             // Parameter lists are stored per event name in diagram.events; clearing a field removes the
             // entry.
@@ -855,6 +919,20 @@
                         field('Entry actions', s.entry, v => (s.entry = v), { placeholder: 'e.g. startTimer; lightOn' }),
                         field('Exit actions', s.exit, v => (s.exit = v), { placeholder: 'e.g. stopTimer' })
                     );
+                    // During actions exist only under Stateflow semantics (shown anyway if a state has some, so
+                    // that they can be removed after switching back to UML).
+                    if (isStateflow() || (s.during || '').trim()) {
+                        panel.append(
+                            field('During actions', s.during, v => {
+                                if (v) {
+                                    s.during = v;
+                                } else {
+                                    delete s.during;
+                                }
+                            }, { placeholder: 'e.g. sample; update' })
+                        );
+                    }
+                    panel.append(hookCode(s.entry, s.exit, s.during));
                 }
             }
             panel.append(colorField(s));
@@ -881,7 +959,9 @@
                 : completion
                   ? 'Completion transition'
                   : isTimeout(t.event)
-                    ? 'Timeout transition'
+                    ? isStateflow()
+                        ? 'Temporal transition (counted in steps)'
+                        : 'Timeout transition'
                     : 'Transition';
         panel.append(
             el('h3', {}, title),
@@ -895,6 +975,7 @@
                 placeholder: fromChoice ? 'e.g. hasCredit, or else' : 'e.g. isReady or !isBusy'
             }),
             field('Action', t.action, v => (t.action = v), { placeholder: 'e.g. reset; notify' }),
+            hookCode(t.guard, t.action),
             selfLoop
                 ? checkbox('Internal (no exit / entry)', t.internal, v => {
                       if (v) {
@@ -2490,11 +2571,20 @@
                 // An empty file is an empty diagram. Invalid JSON hides the diagram and shows the error
                 // banner until the text is fixed.
                 diagram = normalize(text.trim() ? JSON.parse(text) : {});
+                // A file written by a newer MachinaState may use fields whose meaning this version does not
+                // know; it is shown as an error instead of being edited (and silently misinterpreted).
+                if (typeof diagram.formatVersion === 'number' && diagram.formatVersion > Machina.FORMAT_VERSION) {
+                    const tooNew = new Error(`This diagram uses format version ${diagram.formatVersion}; this version of MachinaState supports up to ${Machina.FORMAT_VERSION}. Update the extension to edit it.`);
+                    tooNew.versionError = true;
+                    throw tooNew;
+                }
                 parseErrorBox.hidden = true;
             } catch (err) {
                 diagram = null;
                 parseErrorBox.hidden = false;
-                parseErrorBox.textContent = 'The file is not valid JSON: ' + err.message + '. Fix it in the text editor (Reopen Editor With... > Text Editor).';
+                parseErrorBox.textContent = err.versionError
+                    ? err.message
+                    : 'The file is not valid JSON: ' + err.message + '. Fix it in the text editor (Reopen Editor With... > Text Editor).';
             }
             if (diagram) {
                 // Keep the selection while its elements still exist (e.g. after undo), restart a running

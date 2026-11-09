@@ -13,7 +13,7 @@ const { exportPlantUml, importPlantUml } = require(path.join(root, 'out', 'inter
 const { exportScxml, importScxml } = require(path.join(root, 'out', 'interop', 'scxml.js'));
 const { exportMermaid, importMermaid, mermaidMarkdown, decodeMermaidText } = require(path.join(root, 'out', 'interop', 'mermaid.js'));
 const { parseXml, decodeEntities, attrNS } = require(path.join(root, 'out', 'interop', 'xml.js'));
-const { splitActions, detectFormat } = require(path.join(root, 'out', 'interop', 'common.js'));
+const { splitActions, detectFormat, exportLimitations } = require(path.join(root, 'out', 'interop', 'common.js'));
 const { autoLayout } = require(path.join(root, 'out', 'layout.js'));
 
 const formats = {
@@ -23,10 +23,19 @@ const formats = {
 };
 
 // The examples in every format; the test-only diagrams (deep history in regions, const parameters) in Mermaid.
+// Diagrams with Stateflow semantics are left out: the formats cannot express those semantics (the export
+// command warns about it, see exportLimitations).
 const roundTrips = [
     ...exampleNames().flatMap(name => Object.keys(formats).map(format => [format, name, () => loadExample(name)])),
-    ...testDiagramNames().map(name => ['Mermaid', name, () => loadTestDiagram(name)])
+    ...testDiagramNames()
+        .filter(name => loadTestDiagram(name).semantics !== 'stateflow')
+        .map(name => ['Mermaid', name, () => loadTestDiagram(name)])
 ];
+
+test('exports of a diagram with Stateflow semantics come with a warning', () => {
+    assert.equal(exportLimitations(loadExample('TrafficLight')), undefined);
+    assert.match(exportLimitations(loadTestDiagram('StateflowLab')), /Stateflow semantics.*during actions of 6 state\(s\)/);
+});
 for (const [format, name, load] of roundTrips) {
     const { exporter, importer } = formats[format];
     {

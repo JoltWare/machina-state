@@ -12,6 +12,8 @@
 // name cannot be chosen freely). For saved diagrams they are written to the folder that contains the
 // .machina file, overwriting any previous output; for untitled diagrams the user picks the folder:
 //   C++ → <name>.hpp     C# → <name>.cs     C → <name>.h and <name>.c
+// Diagrams that record the code behind their hooks (imported Stateflow charts) also get a hook stub,
+// <name>Hooks.<ext> (generators/stub.ts), interactively and only if it does not exist yet.
 //
 // Two entry points:
 // - generateForDocument: interactive. Used by the "Generate State Machine Code" command (which uses the
@@ -26,6 +28,7 @@
 // stored `codegen` settings into the Machine, so the generators always use what is saved in the document.
 import * as vscode from 'vscode';
 import { generateCode } from './generators';
+import { generateHookStub } from './generators/stub';
 import { storedCodegen } from './hostUtil';
 import { analyze, isError, Language, parseDiagram, Style } from './model';
 
@@ -119,8 +122,20 @@ export async function generateForDocument(document: vscode.TextDocument, languag
     for (let i = 0; i < files.length; i++) {
         await vscode.workspace.fs.writeFile(targets[i], Buffer.from(files[i].code, 'utf8'));
     }
+    // A diagram that records the code behind its hooks (an imported Stateflow chart) also gets a hook stub,
+    // `<name>Hooks.<ext>`, with that code as the hook bodies. It is written only if it does not exist yet: from
+    // then on it is the user's file. Other diagrams get no extra file.
+    const written = [...targets];
+    if (diagram.hooks && Object.keys(diagram.hooks).length > 0) {
+        const stub = generateHookStub(machine, diagram, language);
+        const target = vscode.Uri.joinPath(folder, machine.name + stub.extension);
+        if (!(await exists(target))) {
+            await vscode.workspace.fs.writeFile(target, Buffer.from(stub.code, 'utf8'));
+            written.push(target);
+        }
+    }
     await vscode.window.showTextDocument(targets[0], { viewColumn: vscode.ViewColumn.Beside, preview: false });
-    vscode.window.setStatusBarMessage(`MachinaState: generated ${targets.map(t => vscode.workspace.asRelativePath(t)).join(', ')}`, 5000);
+    vscode.window.setStatusBarMessage(`MachinaState: generated ${written.map(t => vscode.workspace.asRelativePath(t)).join(', ')}`, 5000);
 }
 
 /**
@@ -168,6 +183,16 @@ export async function generateSilently(document: vscode.TextDocument): Promise<v
     }
     if (written.length) {
         vscode.window.setStatusBarMessage(`MachinaState: regenerated ${written.join(', ')}`, 5000);
+    }
+}
+
+/** True if a file or folder exists at `uri`. */
+async function exists(uri: vscode.Uri): Promise<boolean> {
+    try {
+        await vscode.workspace.fs.stat(uri);
+        return true;
+    } catch {
+        return false;
     }
 }
 

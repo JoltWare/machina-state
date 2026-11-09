@@ -28,6 +28,9 @@
 //     orthogonal state whether a transition taken in one region has left it (see dispatchState).
 //   - timers: a generation counter and an armed flag per `MTimer`, so that stale timeouts can be ignored.
 //   - the event queue for `post`, and the arguments of the event currently being processed.
+//   - Stateflow semantics only (`machine.semantics`): a step counter per state (`ticks`) for temporal
+//     transitions. Under these semantics `dispatchState` also reverses the priority (outer states first)
+//     and runs during actions; see the comment there.
 //
 // Everything observable (guards, actions, traces, timer requests, fired transitions) goes through the
 // `EngineHooks` supplied by the caller; the engine itself has no side effects outside its own state.
@@ -80,6 +83,9 @@ interface QueuedEvent {
  */
 export const COMPLETION_LIMIT = 1000;
 
+/** Largest value of a step counter (Stateflow semantics); the generated counters are 32-bit unsigned. */
+export const TICKS_MAX = 0xffffffff;
+
 /**
  * Thrown by `start`, `dispatch` and `dispatchTimeout` when the completion transitions of one step do not
  * settle within COMPLETION_LIMIT firings, i.e. they almost certainly loop for ever (a cycle of guarded
@@ -126,6 +132,11 @@ export class Engine {
     private readonly handlers = new Map<string, MTransition[]>();
     /** Arguments of the event being processed; passed to guards and transition/branch actions. */
     private args: unknown[] = [];
+    /**
+     * Stateflow semantics with temporal transitions: per state index, the number of step events dispatched
+     * since the state was entered (saturating at TICKS_MAX, like the generated unsigned counter).
+     */
+    private readonly ticks: number[];
 
     /**
      * @param machine The analysed machine to execute.
@@ -136,6 +147,7 @@ export class Engine {
         this.history = machine.regions.map(() => null);
         this.generation = machine.timers.map(() => 0);
         this.armed = machine.timers.map(() => false);
+        this.ticks = machine.states.map(() => 0);
         for (const t of machine.transitions) {
             const key = `${t.source.index}:${t.event}`;
             this.handlers.set(key, [...(this.handlers.get(key) ?? []), t]);
@@ -287,6 +299,15 @@ export class Engine {
         if (timer) {
             this.armed[timer.index] = false;
         }
+        // CountSteps: a step event advances the step counter of every active state (before any transition is
+        // tried, so a state entered during this step starts counting at the next one).
+        if (this.machine.temporal && event === this.machine.stepEvent) {
+            for (const s of this.machine.states) {
+                if (this.isIn(s) && this.ticks[s.index] < TICKS_MAX) {
+                    this.ticks[s.index]++;
+                }
+            }
+        }
         this.exited = null;
         this.trace('Event', event);
         const top = this.active[0];
@@ -305,7 +326,28 @@ export class Engine {
     // region sees the configuration left by the earlier ones. If a transition taken in one region exited
     // `state` (its exit root is `state` or an ancestor), the remaining regions are not asked, even when the
     // transition re-entered `state`: the freshly entered regions must not see the same event again.
+    //
+    // Under Stateflow semantics the order is reversed ("outer first"): `state`'s own transitions are tried
+    // first; only if none fired does it run its during actions and pass the event on to the active state of
+    // each region. During actions do not count as handling the event.
     private dispatchState(state: MState, event: string): boolean {
+        if (this.machine.semantics === 'stateflow') {
+            if (this.handleEvent(state, event)) {
+                return true;
+            }
+            state.during.forEach(a => this.hooks.action(a, []));
+            let handledBelow = false;
+            for (const r of state.regions) {
+                const child = this.active[r.index];
+                if (child && this.dispatchState(child, event)) {
+                    handledBelow = true;
+                    if (this.left(state)) {
+                        return true;
+                    }
+                }
+            }
+            return handledBelow;
+        }
         let handled = false;
         for (const r of state.regions) {
             const child = this.active[r.index];
@@ -343,6 +385,11 @@ export class Engine {
      */
     private handleEvent(state: MState, event: string): boolean {
         for (const t of this.handlers.get(`${state.index}:${event}`) ?? []) {
+            // A temporal transition is enabled once its source has been active long enough; the guard is
+            // only evaluated then (the generated code tests the counter first, too).
+            if (t.ticks !== undefined && this.ticks[state.index] < t.ticks) {
+                continue;
+            }
             if (t.guard && !this.evaluate(t.guard)) {
                 continue;
             }
@@ -501,6 +548,7 @@ export class Engine {
      */
     private enterState(state: MState): void {
         this.active[state.region.index] = state;
+        this.ticks[state.index] = 0;
         this.trace('Enter', state.name);
         state.entry.forEach(a => this.hooks.action(a, []));
         this.startTimers(state);

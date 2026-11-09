@@ -20,7 +20,14 @@ const outputDir = path.join(root, 'test-output');
  */
 const TEST_DIAGRAMS = {
     HistoryLab: ['cpp', 'csharp', 'c'],
-    ConstArgs: ['cpp', 'c']
+    ConstArgs: ['cpp', 'c'],
+    StateflowLab: ['cpp', 'csharp', 'c'],
+    // The imported Stateflow example (examples/stateflow): Stateflow semantics on a real chart.
+    Gear_Logic: ['cpp', 'csharp', 'c']
+};
+/** Test diagrams that live outside test/diagrams. */
+const TEST_DIAGRAM_FILES = {
+    Gear_Logic: path.join(examplesDir, 'stateflow', 'Gear_Logic.machina')
 };
 
 /** Code generation options exercised by the golden and compile tests. */
@@ -51,7 +58,7 @@ function testDiagramNames() {
 
 /** Loads a test-only diagram. */
 function loadTestDiagram(name) {
-    return parseDiagram(fs.readFileSync(path.join(diagramsDir, `${name}.machina`), 'utf8'));
+    return parseDiagram(fs.readFileSync(TEST_DIAGRAM_FILES[name] ?? path.join(diagramsDir, `${name}.machina`), 'utf8'));
 }
 
 /**
@@ -95,7 +102,18 @@ function hasTool(command, args = ['--version']) {
 
 function freshDir(...parts) {
     const dir = path.join(outputDir, ...parts);
-    fs.rmSync(dir, { recursive: true, force: true });
+    try {
+        fs.rmSync(dir, { recursive: true, force: true });
+    } catch (err) {
+        // On Windows a directory that another process uses as its working directory cannot be removed (for
+        // example an IDE's .NET build host that picked up a generated .csproj); emptying it is enough.
+        if (err.code !== 'EPERM' && err.code !== 'EBUSY') {
+            throw err;
+        }
+        for (const entry of fs.readdirSync(dir)) {
+            fs.rmSync(path.join(dir, entry), { recursive: true, force: true });
+        }
+    }
     fs.mkdirSync(dir, { recursive: true });
     return dir;
 }

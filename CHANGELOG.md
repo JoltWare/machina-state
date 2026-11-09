@@ -3,6 +3,32 @@
 
 # Changelog
 
+## 1.1.0
+
+### Stateflow import
+- **Import** reads a Stateflow chart from a Simulink model (`.slx`), including charts that the model uses through a library link and atomic subcharts linked from further libraries. Libraries are found in the folders of `machinaState.stateflow.libraryPath`, then below the model's folder and its ancestors.
+- States, subcharts, parallel states, boxes, junctions (including junctions without an exit), history junctions, default transitions, events, `after(n, sec|msec|usec|tick)` and `[c || after(...)]` are mapped. Parameter values (durations and the sample time, which gives the step period) are read from MATLAB scripts (`machinaState.stateflow.parameterFiles`).
+- Stateflow code becomes guard and action hooks. The diagram keeps the original code (shown under *Hook code* in the properties panel) and the chart's data.
+- **Hook stub**: for such diagrams, *Generate Code* also writes `<Name>Hooks.hpp`, `.cs` or `.c` once, implementing every hook with its original code and declaring the data. It is never overwritten.
+- Also handled: parallel charts, `E1 | E2` triggers, local events raised with `send()` (enables the event queue; the C++ and C# stubs translate them to `Post`), default flow charts in states without substates (become entry code), MATLAB `%` comments, inner-transition priority, and the step period from the chart block's sample time or the model's fixed solver step.
+- **Example**: `examples/stateflow/gear_logic.slx`, a gear shift chart under the BSD 3-Clause License, and its import `Gear_Logic.machina`. The manual walks through the import.
+
+### Stateflow semantics
+- New per-diagram option *Semantics: Stateflow*:
+  - the application dispatches a step event (default `Step`) once per period;
+  - an event is offered to the outermost active state first;
+  - states can have **during actions**;
+  - `after(...)` counts step events, as `after(n steps)` or a time converted with the step period, instead of using timers.
+- Implemented identically in the reference engine and simulator and in the C++, C# and C generators (switch and table). The test suite checks that all of them produce identical traces.
+- Diagrams with UML semantics (the default) are unchanged: the generated code for them is byte-for-byte identical (golden tests).
+- Exporting a Stateflow-semantics diagram to PlantUML, SCXML or Mermaid shows a warning, because those formats cannot express the semantics.
+
+### File format
+- `formatVersion` (2 for Stateflow semantics), `semantics`, `step`, `hooks`, `data`, and `during` on states. A file with a higher format version than the extension supports is refused, by the editor and by validation, instead of being misread.
+
+### Fixes
+- C, switch style: a diagram with orthogonal states and completion transitions, but no orthogonal state completing, generated an unused `AllRegionsFinal`, which failed to compile with `-Werror`.
+
 ## 1.0.0
 
 ### Mermaid

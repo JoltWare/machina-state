@@ -24,6 +24,8 @@
   - **Switch-based** or **table-based**, both with identical behaviour.
   - Guards and actions become abstract hooks that you implement in a subclass. Event parameters are passed to the guard and action hooks.
   - Optional **trace hook**, **thread safety** through `Lock`/`Unlock` hooks, and an **event queue** for raising events from actions.
+- **Stateflow import**: reads a Stateflow chart from a Simulink model (`.slx`), following library links and atomic subcharts, and keeps the chart's code for each hook. Code generation then writes a hook stub with that code.
+- **Stateflow semantics** (optional, per diagram): the outer state sees each event first, states can have during actions, and `after()` counts periodic step events. Used for imported charts, and identical in the simulator and in all generated code.
 - **PlantUML, Mermaid and SCXML** import and export. **Copy as Mermaid** puts a diagram on the clipboard as a ```` ```mermaid ```` block that renders in GitHub, GitLab and most wikis.
 - **Problems panel** validation, **PNG/SVG export** and an optional **generate on save**.
 
@@ -47,7 +49,7 @@ Inside VS Code:
 ## Getting started
 
 1. Install the extension (from a `.vsix`: *Extensions* view → *…* → *Install from VSIX…*).
-2. Run **MachinaState: New State Machine Diagram**, or open one of the files in [`examples/`](examples).
+2. Run **MachinaState: New State Machine Diagram**, or open one of the files in [`examples/`](examples). To try the Stateflow import, import [`examples/stateflow/gear_logic.slx`](examples/stateflow).
 3. Draw states with the toolbar tools, then press **Simulate** to try the machine.
 4. Choose a language and style, then press **Generate Code**. `<Name>.hpp`, `<Name>.cs` or `<Name>.h`/`<Name>.c` is written next to the diagram.
 
@@ -73,6 +75,8 @@ For a guided walkthrough, see the tutorials in the [user manual](docs/manual.pdf
 | Setting | Default | Description |
 | --- | --- | --- |
 | `machinaState.generateOnSave` | `false` | Regenerate the code (with the language and style stored in the diagram) whenever a `.machina` file is saved. |
+| `machinaState.stateflow.libraryPath` | `[]` | Folders searched for the Simulink libraries that an imported Stateflow model links to. |
+| `machinaState.stateflow.parameterFiles` | `[]` | MATLAB scripts with the values of an imported chart's parameters, such as `after()` durations and the sample time. When empty, the import asks for them. |
 
 ## Development
 

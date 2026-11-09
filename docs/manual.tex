@@ -124,7 +124,7 @@
     in C++, C\# and C --- switch-based or table-based.
   \end{minipage}\par
   \vfill
-  {\large Version 1.0.0 \quad\textbullet\quad \today\par}
+  {\large Version 1.1.0 \quad\textbullet\quad \today\par}
 \end{titlepage}
 
 \pagenumbering{roman}
@@ -274,11 +274,11 @@ Generated C code   & A C99 compiler. Uses only \code{<stdbool.h>} and \code{<std
 \begin{enumerate}
   \item Open the \ui{Extensions} view (\key{Ctrl}+\key{Shift}+\key{X}).
   \item Click the \ui{\dots} menu at the top of the view and choose \ui{Install from VSIX\dots}.
-  \item Select \code{machina-state-1.0.0.vsix} and reload VS Code if asked.
+  \item Select \code{machina-state-1.1.0.vsix} and reload VS Code if asked.
 \end{enumerate}
 Alternatively, install from a terminal:
 \begin{lstlisting}[language=bash]
-code --install-extension machina-state-1.0.0.vsix
+code --install-extension machina-state-1.1.0.vsix
 \end{lstlisting}
 
 \section{Building from source}
@@ -1187,6 +1187,10 @@ appear in the context menu of a file in the Explorer.
 \code{machinaState.generateOnSave} & Default \code{false}. When enabled, saving a \code{.machina} file
 regenerates its code with the language and style stored in the diagram. Nothing is written if the
 diagram has problems or the code is unchanged. \\
+\code{machinaState.stateflow.libraryPath} & Folders searched for the Simulink libraries that an
+imported Stateflow model links to (Section~\ref{sec:stateflow-import}). \\
+\code{machinaState.stateflow.parameterFiles} & MATLAB scripts with the values of the parameters of
+imported Stateflow charts. When empty, the import asks. \\
 \bottomrule
 \end{tabularx}
 \end{center}
@@ -1653,6 +1657,37 @@ Section~7 of that tutorial).
 \end{tabularx}
 \end{center}
 
+\section{Stateflow semantics}
+\label{sec:stateflow-semantics}
+A diagram can instead use the execution semantics of MATLAB Stateflow for charts that are woken
+periodically. Choose \ui{Semantics: Stateflow} in the properties of the state machine (nothing
+selected), or import a Stateflow chart (Section~\ref{sec:stateflow-import}). The file then records
+\code{"semantics": "stateflow"} and a step event (Chapter~\ref{ch:format}). Everything above applies,
+with these differences:
+\begin{itemize}
+  \item \textbf{Step event.} The application dispatches the step event (default \code{Step}) once per
+        period, as Simulink wakes the chart once per sample time. Conditions that Stateflow checks at
+        every wake-up are transitions on the step event, such as \code{Step [isFull]}.
+  \item \textbf{Outer state first.} An event is offered to the outermost active state first. Only if
+        none of that state's transitions fires is the event passed on to the active state of each of
+        its regions. In UML semantics the innermost state has priority instead
+        (Section~\ref{sec:dispatch}).
+  \item \textbf{During actions.} A state may have \ui{During actions}. They run on every dispatched
+        event while the state is active and none of its own transitions fired, before the event is
+        passed to its substates. During actions do not count as handling the event.
+  \item \textbf{after() counts steps.} \code{after(n steps)} is enabled once its source state has been
+        active for \(n\) step events. A time such as \code{after(500ms)} is converted with the
+        \ui{Step period} and rounded up to whole steps. The step during which a state is entered does
+        not count. There are no timers: \code{StartTimer}, \code{CancelTimer} and \code{DispatchTimeout}
+        are not generated, and a temporal transition is tried in its place among the state's other step
+        transitions.
+\end{itemize}
+Per step, an active state therefore does this, from the outermost state down: try its own transitions
+for the event (in priority order); if one fires, stop; otherwise run its during actions and continue with
+its substates. Completion transitions, choice points, history and orthogonal regions behave as described
+above. The generated code, the simulator and the reference engine implement these semantics
+identically, and the test suite checks this for every language and style.
+
 \section{Rules for hooks}
 Guards and actions run \emph{during} \code{Dispatch}. They must not call \code{Dispatch} (or
 \code{Start}) recursively: the machine is in the middle of a transition. If an action needs to raise a
@@ -1972,6 +2007,20 @@ The timer callback runs on a thread-pool thread, so combine this with \ui{Thread
 systems, record the deadline in \code{StartTimer}, check it in the main loop or a timer interrupt, and
 call \code{DispatchTimeout} from the main loop.
 
+\section{Hook stubs}
+\label{sec:stub}
+For a diagram that records the code behind its hooks (an imported Stateflow chart), \ui{Generate Code}
+also writes a hook stub next to the generated files: \code{<Name>Hooks.hpp}, \code{<Name>Hooks.cs} or
+\code{<Name>Hooks.c}. It is written only if it does not exist yet, and never overwritten after that: it is
+your file. The stub implements every guard and action. The C++ and C\# stubs are a class derived from the
+machine; the C stub has one function per hook and a hooks structure \code{<Prefix>\_HookImpl} to pass to
+\code{<Prefix>\_Init}. Each hook's body is the code it replaced, and the chart's data are declared as
+members (or file-scope variables in C) with corresponding types. The code is copied as written, so
+functions, bus types and literals of the source tool have to be supplied or adapted. The one exception is
+Stateflow's \code{send(E, \dots)}, which raises an event: in C++ and C\# it becomes \code{Post(Event::E)} or
+\code{Post(Event.E)}. A hook without
+recorded code gets an empty body, and a guard without code returns \code{false}.
+
 \section{Integration patterns}
 
 \subsection{Unit testing}
@@ -2002,9 +2051,10 @@ TEST(TrafficLight, TimerAdvancesFromRedToGreen) {
 \label{ch:interop}
 
 MachinaState reads and writes three textual formats, so that diagrams can move to and from other tools
-and into documentation. Export writes a file next to the diagram; import creates a new
-\code{.machina} file, lays it out automatically (Section~\ref{sec:layout}) and opens it. Problems
-found during import are reported as warnings; the elements concerned are skipped.
+and into documentation, and it imports Stateflow charts from Simulink models. Export writes a file next
+to the diagram; import creates a new \code{.machina} file, lays it out automatically
+(Section~\ref{sec:layout}) and opens it. Problems found during import are reported as warnings; the
+elements concerned are skipped.
 
 \section{PlantUML}
 \ui{Export Diagram as PlantUML} writes a PlantUML state diagram that renders with any PlantUML
@@ -2146,11 +2196,121 @@ the parallel state and reported. \code{machina:} attributes are recognised under
 \code{urn:machinastate:scxml}. Executable content other than function calls, the data model,
 \code{<invoke>} and similar elements cannot be represented in a diagram; they are reported and skipped.
 
+\section{Stateflow (Simulink models)}
+\label{sec:stateflow-import}
+\ui{Import PlantUML, SCXML, Mermaid or Stateflow State Machine} also accepts a Simulink model
+(\code{.slx}) that contains a Stateflow chart. The result uses Stateflow semantics
+(Section~\ref{sec:stateflow-semantics}), so the imported diagram behaves like the chart.
+
+\paragraph{Libraries.} A chart that a model uses through a library link, and every atomic subchart, is
+read from its library file \code{<library>.slx}. Libraries are found by name, as MATLAB finds them on its
+path: first in the folders of the setting \code{machinaState.stateflow.libraryPath}, then below the
+model's own folder and below each of its ancestors, up to three levels up.
+
+\paragraph{Parameters and step period.} Durations of \code{after(\dots)} and the chart's sample time are
+often names of MATLAB variables. Their values are read from the MATLAB scripts listed in
+\code{machinaState.stateflow.parameterFiles}. When that setting is empty, the import asks for scripts
+(\ui{Cancel} skips them). Statements of the form \code{name = 0.25;} or \code{name = single(0.25);} are
+understood; computed values are not. The step period is the sample time of the chart's block or, when the
+chart inherits it, the model's fixed solver step. If it is not known (for example with a variable-step
+solver), the import asks for it, and it can also be set later in the diagram's properties. A model with
+several charts asks which one to import.
+
+\paragraph{Mapping.}
+\begin{center}
+\small
+\begin{tabularx}{\linewidth}{@{}lX@{}}
+\toprule
+\textbf{Stateflow} & \textbf{MachinaState} \\
+\midrule
+State, subchart              & state; a subchart is only a separate view of a composite state \\
+Parallel (AND) decomposition & one region per parallel state, containing a state of the same name that keeps its actions and substates; a parallel chart gets a top-level state \code{Chart} to hold the regions \\
+Box                          & its contents move into the enclosing state \\
+Atomic subchart              & the library chart, imported into the state \\
+Default transition           & initial pseudostate; into a junction: through a transient state \textit{State}\code{Start} with a completion transition. A flow chart of junctions in a state without substates becomes entry code of that state \\
+Connective junction          & choice point \\
+Junction without exit        & the path becomes an internal transition of its source state \\
+History junction             & shallow history pseudostate \\
+Event \code{E}               & event \code{E}; \code{E1 | E2} gives one transition per event \\
+\code{send(E, \dots)}         & an action hook that raises \code{E} with \code{Post}; the event queue is enabled \\
+Condition only, or no label  & transition on the step event \\
+\code{after(n,sec)}, \code{msec}, \code{usec} & \code{after(\dots ms)} or \code{after(\dots s)} \\
+\code{after(n,tick)}         & \code{after(n steps)} \\
+\code{[c || after(\dots)]}   & a step transition with guard \code{c} plus an \code{after(\dots)} transition \\
+Expressions, statements      & guard hooks \code{guard}\textit{SSID} and action hooks \code{action}\textit{SSID}, \textit{State}\code{Entry}, \textit{State}\code{During}, \textit{State}\code{Exit} \\
+\code{entry}, \code{during}, \code{exit} & entry, during and exit actions \\
+Data                         & recorded in the diagram and declared in the hook stub \\
+Comments                     & removed: \code{//} and \code{/* */}, in the MATLAB action language \code{\%} and \code{\%\{ \%\}} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+Guards and actions are hooks in MachinaState, not code. Each expression or statement list therefore
+becomes a hook, named after the Stateflow SSID or state so that it can be traced back. The original code
+is kept in the diagram, shown read-only under \ui{Hook code} in the properties panel, and written into
+the hook stub when code is generated (Section~\ref{sec:stub}).
+
+\paragraph{Limitations.} Graphical, MATLAB and Simulink functions are not imported; the hook code calls
+them, so the hook stub needs their implementation. \code{on} and \code{bind} sections of state labels are
+dropped. A transition from a state to one of its own substates (a Stateflow inner transition) is imported
+as an external transition, which exits the state. Condition actions on junction paths run once a complete
+path has been chosen, not while Stateflow tests the path. An event raised with \code{send()} is
+processed after the current event and offered to the whole machine, while Stateflow processes it at once
+and only in the state that \code{send()} names. Each of these cases is reported as a warning.
+
+\subsection{Example: a gear shift chart}
+\label{sec:stateflow-example}
+The folder \code{examples/stateflow} of the MachinaState repository contains \code{gear\_logic.slx}, a
+Simulink model with the Stateflow chart \code{Gear\_Logic}: a simplified controller for a four-gear
+automatic transmission.\footnote{\code{gear\_logic.slx} is copyright \textcopyright~2021 iCub Tech and
+licensed under the BSD 3-Clause License, see \code{examples/stateflow/LICENSE}. It is unmodified from
+\url{https://github.com/mesh-iit/training-matlab-rev-lights}.} To import it, run \ui{Import PlantUML,
+SCXML, Mermaid or Stateflow State Machine}, pick the file, press \ui{Cancel} when asked for parameter
+scripts (the chart has no symbolic durations), and save the result as \code{Gear\_Logic.machina}. The
+same file is in the folder for comparison.
+
+\screenshot{sf-gear}{The imported gear shift chart; the panel shows the Stateflow code behind the
+selected upshift transition.}
+
+The import shows how the chart was mapped:
+\begin{itemize}
+  \item The chart has two parallel states, which become two regions of a top-level state \code{Chart}.
+        \code{gear\_state} keeps the current gear, \code{first} to \code{fourth}, and changes it on the
+        events \code{UP} and \code{DOWN}. \code{selection\_state} compares the speed with two thresholds
+        and decides when to shift.
+  \item The chart runs at the model's fixed solver step of 0.01\,s, so the step period is 10\,ms.
+        \code{after(0.1, sec)} becomes \code{after(100ms)}, which is 10 steps.
+  \item Conditions and statements become hooks named after their transition or state. For example,
+        \code{guard27} stands for \code{[speed >= up\_th]}, \code{secondEntry} for \code{gear=2;}, and
+        \code{gear\_stateDuring} for the during action of \code{gear\_state}. The properties panel shows
+        the code behind a hook under \ui{Hook code}.
+  \item The chart raises \code{UP} and \code{DOWN} with \code{send()}. The import enables the event queue,
+        and the hook stub raises them with \code{Post}.
+  \item The lines of \code{gear\_state} that start with \code{\%on} are MATLAB comments and are ignored.
+        \code{computeThresholds}, a graphical function, is not imported; its call stays an action hook.
+\end{itemize}
+\ui{Generate Code} then writes \code{Gear\_Logic.hpp} and, once, the hook stub \code{Gear\_LogicHooks.hpp}
+(Section~\ref{sec:stub}). An excerpt:
+\lstinputlisting[language=C++, caption={Part of the hook stub of the gear shift chart.}]{generated/snippets/gear-hooks.hpp}
+The code is MATLAB, so some of it needs adapting: \code{max} and \code{min} become \code{std::max} and
+\code{std::min}, \code{computeThresholds} needs an implementation, and the application sets \code{delta}
+from its inputs. The machine is then driven by one step event per period:
+\begin{lstlisting}[language=C++]
+Gear_LogicHooks gears;
+gears.Start();
+// every 10 ms:
+gears.Dispatch(Gear_Logic::Event::Step);
+\end{lstlisting}
+The test suite imports this model, compares the result with \code{Gear\_Logic.machina}, and runs the code
+generated from it in every language and style against the reference engine.
+
 \section{Round trips}
 The test suite exports every example to PlantUML, Mermaid and SCXML, imports the result, and requires
 the imported diagram to produce exactly the same trace as the original in the reference engine. It also
 renders every Mermaid export with Mermaid itself. Element positions are not part of any of the formats;
 they are recomputed by the automatic layout.
+
+None of the three formats can express Stateflow semantics. Exporting a diagram that uses them writes the
+UML reading of the diagram, without during actions, and shows a warning.
 
 %=====================================================================
 \chapter{Validation Rules}
@@ -2182,6 +2342,12 @@ simulation; warnings point at parts of the diagram that are valid but have no ef
 \emph{timeout must be a positive whole number of milliseconds} & e.g. \code{after(250ms)}, \code{after(2s)}; fractions of a millisecond are not possible. \\
 \emph{clashes with a generated timeout event} & An event is named like a generated timeout event (\textit{State}\code{\_After}\textit{n}\code{ms}); rename it. \\
 \emph{Transitions cannot target an initial pseudostate} & Target the composite state instead. \\
+\emph{during actions need Stateflow semantics} & During actions exist only under Stateflow semantics; switch the semantics or clear them. \\
+\emph{after(\dots{} steps) needs Stateflow semantics} & Use a time, such as \code{after(5s)}, or switch to Stateflow semantics. \\
+\emph{needs a step period to be counted in steps} & Set the step period in the state machine's properties, or write \code{after(n steps)}. \\
+\emph{The step period must be a positive number} & Enter the period in milliseconds, e.g. \code{10}. \\
+\emph{Step event \dots{} is not a valid identifier} & Name the step event with an identifier other than \code{None} and \code{Completion}. \\
+\emph{The step event \dots{} cannot have parameters} & Remove its parameter list. \\
 \emph{Transitions cannot start at a region} & Draw the transition from the orthogonal state or from a state inside the region. \\
 \emph{a region cannot be a target} & Target the orthogonal state or a state inside the region. \\
 \emph{the target history pseudostate is not inside a composite state} & Move the history pseudostate into a composite state, or retarget the transition. \\
@@ -2222,11 +2388,16 @@ absolute, and nesting is expressed through \code{parent}.
 \textbf{Field} & \textbf{Meaning} \\
 \midrule
 \endhead
+\code{formatVersion}         & Optional; absent means 1. Version 2 adds Stateflow semantics. A file with a higher version than the installed MachinaState supports is refused instead of misread. \\
+\code{semantics}             & Optional: \code{uml} (default) or \code{stateflow} (Section~\ref{sec:stateflow-semantics}). \\
+\code{step}                  & Stateflow semantics: \code{event} (default \code{Step}) and \code{periodMs}. \\
 \code{name}                  & Class name and output file name. \\
 \code{namespace}             & Optional namespace. \\
-\code{states[]}              & Elements: \code{id}, \code{name}, \code{kind} (\code{state}, \code{region}, \code{initial}, \code{final}, \code{history}, \code{choice}), \code{parent} (id or \code{null}), \code{x}, \code{y}, \code{w}, \code{h}; states also \code{entry}, \code{exit}; history also \code{deep}; optional \code{color}. The parent of a region is a state; elements inside a region have the region as parent. \\
-\code{transitions[]}         & \code{id}, \code{source}, \code{target}, \code{event} (name, \code{after(\dots)} or empty), \code{guard} (may be \code{else} on choice branches), \code{action}; optional \code{bend} (curvature), \code{internal}, \code{color}. \\
+\code{states[]}              & Elements: \code{id}, \code{name}, \code{kind} (\code{state}, \code{region}, \code{initial}, \code{final}, \code{history}, \code{choice}), \code{parent} (id or \code{null}), \code{x}, \code{y}, \code{w}, \code{h}; states also \code{entry}, \code{exit} and, under Stateflow semantics, \code{during}; history also \code{deep}; optional \code{color}. The parent of a region is a state; elements inside a region have the region as parent. \\
+\code{transitions[]}         & \code{id}, \code{source}, \code{target}, \code{event} (name, \code{after(\dots)}, under Stateflow semantics also \code{after(n steps)}, or empty), \code{guard} (may be \code{else} on choice branches), \code{action}; optional \code{bend} (curvature), \code{internal}, \code{color}. \\
 \code{events}                & Map from event name to parameter list, e.g. \code{\{ "Volume": "int level" \}}. \\
+\code{hooks}                 & Optional map from hook name to \code{code} and \code{origin}: the code a hook stands for (filled by the Stateflow import). \\
+\code{data[]}                & Optional variables used by the hook code: \code{name}, \code{scope}, \code{type}, optional \code{size}. \\
 \code{scenarios[]}           & Optional simulator scenarios: \code{name} and \code{steps[]}, each step an \code{event} with optional \code{args} (array) and \code{guards} (map of guard name to \code{false}). \\
 \code{codegen}               & \code{language} (\code{cpp}/\code{csharp}/\code{c}), \code{style} (\code{switch}/\code{table}), \code{trace}, \code{threadSafe}, \code{queue}, \code{queueCapacity} (default 16). \\
 \bottomrule

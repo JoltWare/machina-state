@@ -32,7 +32,24 @@
 // exit up to, but not including, the LCA of source and target and re-enter downwards) unless marked
 // internal; event-less transitions are completion transitions; `after(...)` events are timeouts; choice
 // points are evaluated with junction semantics (a complete guarded path is selected before anything is
-// exited).
+// exited). A diagram may opt into Stateflow semantics instead (`Diagram.semantics`, see `Semantics`):
+// outer states see events first, states have during actions and `after(...)` counts step events. Every
+// part of the analysis specific to it is guarded, so UML diagrams are analysed exactly as before.
+
+/**
+ * Execution semantics of a diagram. `uml` (the default) is the UML run-to-completion model described above.
+ * `stateflow` follows MATLAB Stateflow for charts that are woken periodically: an event is offered to the
+ * outermost active state first and only reaches the substates when no transition of the state fired; each
+ * state then runs its `during` actions; and `after(...)` is counted in step events instead of being a timer.
+ * See the "Stateflow Semantics" section of docs/manual.tex.
+ */
+export type Semantics = 'uml' | 'stateflow';
+
+/**
+ * Highest `formatVersion` this release understands. Version 2 adds Stateflow semantics; a file with a higher
+ * version was written by a newer MachinaState and is refused by `parseDiagram` rather than misread.
+ */
+export const FORMAT_VERSION = 2;
 
 /** Element kinds of the document format; `initial`, `history`, `choice` and `region` are not real states. */
 export type StateKind = 'state' | 'initial' | 'final' | 'history' | 'choice' | 'region';
@@ -66,6 +83,11 @@ export interface StateNode {
     entry?: string;
     /** Exit actions, same syntax as `entry`. */
     exit?: string;
+    /**
+     * During actions, same syntax as `entry` (Stateflow semantics only): run on every dispatched event while
+     * the state is active and none of its own transitions fired, before the event reaches its substates.
+     */
+    during?: string;
     /** Optional fill colour used by the editor. */
     color?: string;
     /** History pseudostates only: deep (H*) instead of shallow (H). */
@@ -124,8 +146,45 @@ export interface Scenario {
     steps: ScenarioStep[];
 }
 
+/** The step event of Stateflow semantics (`Diagram.step`). */
+export interface StepOptions {
+    /** Name of the event the host dispatches once per period; default `Step`. */
+    event?: string;
+    /** Period in milliseconds; needed to convert `after(<time>)` into a number of steps. */
+    periodMs?: number;
+}
+
+/** What a hook stands for, e.g. the Stateflow code it replaced on import (`Diagram.hooks`). */
+export interface HookInfo {
+    /** Code the hook should implement, as written in the source tool (C-like for Stateflow). */
+    code: string;
+    /** Where it came from, e.g. `transition 12` or `state Heating entry`. */
+    origin?: string;
+}
+
+/** A variable used by the hook code (`Diagram.data`), e.g. a Stateflow input, output, local or parameter. */
+export interface DataItem {
+    name: string;
+    /** `input`, `output`, `local`, `parameter`, `constant` or `function`. */
+    scope: string;
+    /** Type as written in the source tool, e.g. `single`, `uint8`, `Bus: StateMachineInput`. */
+    type: string;
+    /** Array size, if not a scalar. */
+    size?: string;
+}
+
 /** The whole document stored in a *.machina file, as returned by `parseDiagram`. */
 export interface Diagram {
+    /** Format version of the file; absent means 1. See FORMAT_VERSION. */
+    formatVersion?: number;
+    /** Execution semantics; absent means `uml`. */
+    semantics?: Semantics;
+    /** Step event and period, for Stateflow semantics. */
+    step?: StepOptions;
+    /** Code behind the hooks (informational; used for the hook stub and shown in the editor). */
+    hooks?: Record<string, HookInfo>;
+    /** Variables the hook code uses (informational; declared in the hook stub). */
+    data?: DataItem[];
     /** Name of the generated class (or C type prefix). */
     name: string;
     /** Optional namespace, written with `.` (C#) or `::` (C++) separators. */
@@ -174,6 +233,8 @@ export interface MState {
     entry: string[];
     /** Parsed exit action names (always empty for final states). */
     exit: string[];
+    /** Parsed during action names (Stateflow semantics only; otherwise empty). */
+    during: string[];
     /** Region that contains this state. */
     region: MRegion;
     /** Own regions: empty for simple states, one for ordinary composites, several for orthogonal states. */
@@ -227,8 +288,12 @@ export interface MBranch {
     branches?: MBranch[];
 }
 
-/** How a transition is triggered: a user event, an `after(...)` timeout, or the completion of its source. */
-export type TransitionKind = 'event' | 'timeout' | 'completion';
+/**
+ * How a transition is triggered: a user event, an `after(...)` timeout, or the completion of its source.
+ * Under Stateflow semantics `after(...)` is `temporal` instead: a candidate for the step event that is
+ * enabled once its source has been active for `ticks` steps.
+ */
+export type TransitionKind = 'event' | 'timeout' | 'completion' | 'temporal';
 
 /** A validated transition leaving a real state, with everything needed to fire it resolved. */
 export interface MTransition {
@@ -249,6 +314,8 @@ export interface MTransition {
     history: boolean;
     /** Present when the transition leads into a choice point. */
     branches?: MBranch[];
+    /** Temporal transitions only: number of step events `source` must have been active for. */
+    ticks?: number;
 }
 
 /** A timer for one distinct `after(...)` timeout of one state. */
@@ -290,6 +357,11 @@ export interface Machine {
     timers: MTimer[];
     /** True when any completion transition exists. */
     completion: boolean;
+    semantics: Semantics;
+    /** Stateflow semantics: the step event (always part of `events`); undefined for UML semantics. */
+    stepEvent?: string;
+    /** True when any temporal transition exists (Stateflow semantics), i.e. per-state step counters are needed. */
+    temporal: boolean;
     trace: boolean;
     threadSafe: boolean;
     queue: boolean;
@@ -364,6 +436,11 @@ const RESERVED_MEMBERS = new Set([
     'history', 'exited'
 ]);
 /**
+ * Members the generators add only under Stateflow semantics (plus the `During_<State>` wrappers); reserved
+ * only there, so that existing UML diagrams stay valid.
+ */
+const STATEFLOW_MEMBERS = new Set(['OnDuring', 'CountSteps', 'ticks', 'ticks_']);
+/**
  * Name patterns of generated per-state/per-event members (e.g. `Entry_Red`, `DispatchPlay`, `PostPlay`,
  * `ArgsOfPlay`) that hook names must not match either.
  */
@@ -383,7 +460,19 @@ export function parseDiagram(text: string): Diagram {
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
         throw new Error('Diagram must be a JSON object.');
     }
+    // A newer format may change the meaning of existing fields, so it is refused rather than misread.
+    if (typeof raw.formatVersion === 'number' && raw.formatVersion > FORMAT_VERSION) {
+        throw new Error(`This diagram uses format version ${raw.formatVersion}; this version of MachinaState supports up to ${FORMAT_VERSION}. Update the extension.`);
+    }
+    const isObject = (v: unknown) => typeof v === 'object' && v !== null && !Array.isArray(v);
     return {
+        // The optional fields are only present when the file has them, so that a UML diagram parses (and is
+        // compared in tests) exactly as before.
+        ...(typeof raw.formatVersion === 'number' ? { formatVersion: raw.formatVersion } : {}),
+        ...(typeof raw.semantics === 'string' ? { semantics: raw.semantics } : {}),
+        ...(isObject(raw.step) ? { step: raw.step } : {}),
+        ...(isObject(raw.hooks) ? { hooks: raw.hooks } : {}),
+        ...(Array.isArray(raw.data) ? { data: raw.data } : {}),
         name: typeof raw.name === 'string' ? raw.name : 'StateMachine',
         namespace: typeof raw.namespace === 'string' ? raw.namespace : '',
         states: Array.isArray(raw.states) ? raw.states : [],
@@ -408,6 +497,15 @@ export function parseTimeout(event: string): number | undefined {
 }
 
 /**
+ * Number of steps of an `after(<n> steps)` (or `ticks`) event, or undefined if the text is not one. Only
+ * valid under Stateflow semantics, where `after(...)` is counted in step events.
+ */
+export function parseSteps(event: string): number | undefined {
+    const m = /^after\s*\(\s*(\d+(?:\.\d+)?)\s*(steps?|ticks?)\s*\)$/i.exec(event.trim());
+    return m ? Number(m[1]) : undefined;
+}
+
+/**
  * True if one of the branches is always taken (an [else] branch whose continuation is exhaustive too). An
  * [else] branch that leads into a nested choice point without an [else] of its own can still fail, so the
  * check recurses into nested branch lists.
@@ -422,7 +520,7 @@ export function isExhaustive(branches: MBranch[]): boolean {
  * transitions of its source and the generators can emit it without a fall-through path.
  */
 export function alwaysFires(t: MTransition): boolean {
-    return !t.guard && (!t.branches || isExhaustive(t.branches));
+    return !t.guard && t.ticks === undefined && (!t.branches || isExhaustive(t.branches));
 }
 
 /** True for a C-family identifier that is not a keyword of any target language. */
@@ -712,6 +810,20 @@ export function analyze(d: Diagram): { machine?: Machine; issues: Issue[] } {
     if (ns && !ns.split(/\.|::/).every(isIdentifier)) {
         issues.push({ message: `Namespace '${ns}' is not valid.` });
     }
+    // Execution semantics. Everything specific to Stateflow semantics is guarded by `stateflow`, so a UML
+    // diagram is analysed exactly as before.
+    if (d.semantics !== undefined && d.semantics !== 'uml' && d.semantics !== 'stateflow') {
+        issues.push({ message: `Unknown semantics '${String(d.semantics)}' (use 'uml' or 'stateflow').` });
+    }
+    const stateflow = d.semantics === 'stateflow';
+    const stepEvent = stateflow ? (typeof d.step?.event === 'string' && d.step.event.trim() ? d.step.event.trim() : 'Step') : undefined;
+    const period = stateflow ? d.step?.periodMs : undefined;
+    if (stepEvent !== undefined && (!isIdentifier(stepEvent) || stepEvent === 'None' || stepEvent === COMPLETION_EVENT)) {
+        issues.push({ message: `Step event '${stepEvent}' is not a valid identifier (or is reserved).` });
+    }
+    if (period !== undefined && (typeof period !== 'number' || !(period > 0))) {
+        issues.push({ message: 'The step period must be a positive number of milliseconds.' });
+    }
 
     // Effective parent id of every element: its `parent` link, or null once that link has been found invalid.
     // Kept here rather than written back into the StateNode objects, which belong to the caller; every later
@@ -792,6 +904,9 @@ export function analyze(d: Diagram): { machine?: Machine; issues: Issue[] } {
             issues.push({ ...stateRef(s.id), message: `${where}: name is not unique (state names are global, even when nested).` });
         }
         names.add(s.name);
+        if (!stateflow && (s.during ?? '').trim()) {
+            issues.push({ ...stateRef(s.id), message: `${where}: during actions need Stateflow semantics.` });
+        }
         // `index`, `parent` and `region` are placeholders here; they are filled in by the region assignment and
         // pre-order numbering below. Final states have no entry or exit actions.
         mstates.set(s.id, {
@@ -803,6 +918,7 @@ export function analyze(d: Diagram): { machine?: Machine; issues: Issue[] } {
             isFinal: s.kind === 'final',
             entry: s.kind === 'state' ? parseActions(s.entry, `${where} entry`, stateRef(s.id), issues) : [],
             exit: s.kind === 'state' ? parseActions(s.exit, `${where} exit`, stateRef(s.id), issues) : [],
+            during: s.kind === 'state' ? parseActions(s.during, `${where} during`, stateRef(s.id), issues) : [],
             region: undefined as unknown as MRegion,
             regions: []
         });
@@ -1119,10 +1235,32 @@ export function analyze(d: Diagram): { machine?: Machine; issues: Issue[] } {
         // the same timeout on one state, e.g. with different guards, share the timer).
         let kind: TransitionKind = 'event';
         let event = eventText;
+        let ticks: number | undefined;
         const timeout = eventText ? parseTimeout(eventText) : undefined;
+        const steps = eventText ? parseSteps(eventText) : undefined;
         if (!eventText) {
             kind = 'completion';
             event = COMPLETION_EVENT;
+        } else if (steps !== undefined && !stateflow) {
+            issues.push({ ...transitionRef(t.id), message: `${where}: after(... steps) needs Stateflow semantics; use a time such as after(5s).` });
+            continue;
+        } else if (stateflow && (timeout !== undefined || steps !== undefined)) {
+            // Stateflow semantics: no timer; the transition is a candidate for the step event, enabled once the
+            // source has been active for `ticks` steps. A time is rounded up to whole periods.
+            if (steps !== undefined) {
+                ticks = steps;
+            } else if (period !== undefined && typeof period === 'number' && period > 0) {
+                ticks = Math.max(1, Math.ceil(timeout! / period - 1e-9));
+            } else {
+                issues.push({ ...transitionRef(t.id), message: `${where}: after(${eventText.replace(/^after\s*\(|\)\s*$/g, '').trim()}) needs a step period to be counted in steps; set the step period or write after(n steps).` });
+                continue;
+            }
+            if (!Number.isInteger(ticks) || ticks <= 0) {
+                issues.push({ ...transitionRef(t.id), message: `${where}: after(...) must be a positive whole number of steps.` });
+                continue;
+            }
+            kind = 'temporal';
+            event = stepEvent!;
         } else if (timeout !== undefined) {
             if (!Number.isInteger(timeout) || timeout <= 0) {
                 issues.push({ ...transitionRef(t.id), message: `${where}: timeout must be a positive whole number of milliseconds.` });
@@ -1153,7 +1291,7 @@ export function analyze(d: Diagram): { machine?: Machine; issues: Issue[] } {
             // source and `lca` to null as placeholders that consumers must not use.
             const branches = resolveChoice(dst, source, []);
             if (branches) {
-                transitions.push({ id: t.id, source, target: source, event, kind, guard, actions, lca: null, internal: false, history: false, branches });
+                transitions.push({ id: t.id, source, target: source, event, kind, guard, actions, lca: null, internal: false, history: false, branches, ...(ticks !== undefined ? { ticks } : {}) });
             }
             continue;
         }
@@ -1169,7 +1307,7 @@ export function analyze(d: Diagram): { machine?: Machine; issues: Issue[] } {
             issues.push({ ...transitionRef(t.id), message: `${where}: transitions between orthogonal regions are not allowed.` });
             continue;
         }
-        transitions.push({ id: t.id, source, target, event, kind, guard, actions, lca: common, internal, history });
+        transitions.push({ id: t.id, source, target, event, kind, guard, actions, lca: common, internal, history, ...(ticks !== undefined ? { ticks } : {}) });
     }
     // Priority within a source state: candidates that may not fire (guarded, or with a non-exhaustive choice)
     // are tried before those that always fire, otherwise in diagram order (the sort is stable). Sorting by
@@ -1196,6 +1334,18 @@ export function analyze(d: Diagram): { machine?: Machine; issues: Issue[] } {
         }
     }
     const completion = transitions.some(t => t.kind === 'completion');
+    // Under Stateflow semantics the step event always exists (it drives during actions and temporal
+    // transitions even when no transition names it) and comes first.
+    if (stepEvent !== undefined && isIdentifier(stepEvent)) {
+        const at = userEvents.indexOf(stepEvent);
+        if (at >= 0) {
+            userEvents.splice(at, 1);
+        }
+        userEvents.unshift(stepEvent);
+        if ((d.events?.[stepEvent] ?? '').trim()) {
+            issues.push({ message: `The step event '${stepEvent}' cannot have parameters.` });
+        }
+    }
     const events = [...userEvents, ...timers.map(x => x.event), ...(completion ? [COMPLETION_EVENT] : [])];
 
     // Hooks (guards / actions) must not collide with each other or generated members.
@@ -1212,8 +1362,9 @@ export function analyze(d: Diagram): { machine?: Machine; issues: Issue[] } {
         });
     }
     const guards = [...new Set([...transitions.filter(t => t.guard).map(t => t.guard!.name), ...branchGuards])];
-    // Actions owned by a state: its entry and exit actions plus the initial-transition actions of its regions.
-    const stateHooks = (s: MState) => [...s.entry, ...s.exit, ...s.regions.flatMap(r => r.initial?.actions ?? [])];
+    // Actions owned by a state: its entry, exit (and during) actions plus the initial-transition actions of its
+    // regions. During actions are always empty under UML semantics, so they do not change the list there.
+    const stateHooks = (s: MState) => [...s.entry, ...s.exit, ...s.during, ...s.regions.flatMap(r => r.initial?.actions ?? [])];
     const actions = [
         ...new Set([
             ...(rootInitial?.actions ?? []),
@@ -1229,7 +1380,7 @@ export function analyze(d: Diagram): { machine?: Machine; issues: Issue[] } {
         }
     }
     for (const h of [...guards, ...actions]) {
-        if (RESERVED_MEMBERS.has(h) || h === d.name || RESERVED_PREFIX.test(h)) {
+        if (RESERVED_MEMBERS.has(h) || h === d.name || RESERVED_PREFIX.test(h) || (stateflow && (STATEFLOW_MEMBERS.has(h) || /^During_/.test(h)))) {
             issues.push({ message: `'${h}' clashes with a generated member name.` });
         }
     }
@@ -1310,6 +1461,9 @@ export function analyze(d: Diagram): { machine?: Machine; issues: Issue[] } {
             hookParams,
             timers,
             completion,
+            semantics: stateflow ? 'stateflow' : 'uml',
+            stepEvent,
+            temporal: transitions.some(t => t.ticks !== undefined),
             trace: d.codegen?.trace === true,
             threadSafe: d.codegen?.threadSafe === true,
             queue: d.codegen?.queue === true,
